@@ -41,7 +41,7 @@
 
 ## 2. Payload (client → collettore)
 
-`POST https://knowledge.sudobat.marcosimone.tech/api/v1/sets` — JSON, cap 4 KB:
+`POST https://sudobat-knowledge.marcosimone.tech/api/v1/sets` — JSON, cap 4 KB:
 
 ```json
 {
@@ -65,7 +65,7 @@ telemetria). Solo stdlib (urllib), timeout corto, mai bloccante per la UI.
 
 ## 3. Collettore (VPS — layer /srv, pattern portali standard)
 
-- Node.js o Python minimale, porta dedicata, Traefik `knowledge.sudobat.marcosimone.tech`,
+- Node.js o Python minimale, porta dedicata, Traefik `sudobat-knowledge.marcosimone.tech`,
   ufw bridge, PM2. DB SQLite `submissions` (payload + received_at + ip_hash effimero
   SOLO per rate-limit, mai persistito oltre 24h → GDPR-friendly, niente IP a riposo).
 - **Validazione all'ingresso** (rifiuto muto, HTTP 204 comunque — niente oracle per abusi):
