@@ -1,0 +1,9 @@
+# Regole diagnostiche crash per gli emulatori Switch. Schema in PRESET_SCHEMA.md.
+#
+# VUOTO DI PROPOSITO. Nessuna regola scritta a mano da Claude. SudoBat riconosce un
+# crash solo quando ne ha imparato la firma dal campo (sudobat.distill lo popola qui).
+#
+# NOTA: qui c'era anche UNA scoperta vera (Mario Odyssey su UHD630: crash da library
+# applet su fork-yuzu -> serve Ryujinx). NON e' inventata, resta nella storia git.
+# Va reintrodotta semmai dal loop di apprendimento, non pre-cucinata qui. Da vedere.
+rules: []

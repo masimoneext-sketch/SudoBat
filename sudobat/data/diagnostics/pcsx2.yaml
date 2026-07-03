@@ -1,0 +1,7 @@
+# Regole diagnostiche crash per pcsx2. Schema in PRESET_SCHEMA.md.
+#
+# VUOTO DI PROPOSITO. Nessuna regola scritta a mano da Claude (erano mie congetture,
+# stesso problema del catalogo giochi). SudoBat riconosce un crash solo quando ha
+# imparato la firma dal campo: il loop di distillazione (sudobat.distill) aggiunge
+# qui le regole verificate. Un crash mai visto non lo capisce da solo -- e lo dice.
+rules: []

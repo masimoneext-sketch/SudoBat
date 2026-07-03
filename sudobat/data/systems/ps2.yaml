@@ -1,0 +1,8 @@
+# Catalogo giochi PS2. Schema in PRESET_SCHEMA.md.
+#
+# VUOTO DI PROPOSITO. Nessun preset scritto a mano da Claude.
+# SudoBat identifica il gioco da solo (serial da SYSTEM.CNF, sudobat.identify.ps2)
+# e DERIVA i set grafici dal motore (sudobat.tuning) ragionando su hardware +
+# emulatore; gli esiti reali (sudobat.outcomes) li affinano giocando.
+# Il tool fa il lavoro. Qui dentro non c'e' conoscenza pre-cucinata.
+games: {}
