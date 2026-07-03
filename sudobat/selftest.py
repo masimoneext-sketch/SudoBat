@@ -388,6 +388,116 @@ def brain_gestione_chiave_personale():
             os.environ["GROQ_API_KEY"] = orig_env
 
 
+@test
+def share_consenso_e_coda():
+    from . import share
+    orig_p, orig_q = share._PREFS, share._QUEUE
+    try:
+        with tempfile.TemporaryDirectory() as td:
+            share._PREFS = Path(td) / "share_prefs.json"
+            share._QUEUE = Path(td) / "share_queue.json"
+            assert share.consent() is None            # mai chiesto
+            entry = share.build_entry(system="ps2", game_id="SLUS-205.60",
+                                      game_title="GTA SA", tier="igpu-weak",
+                                      emulator="pcsx2", core="pcsx2",
+                                      settings={"pcsx2_resolution": 2},
+                                      flags={"fluido": True, "fps_ok": True,
+                                             "scatti_concitate": False, "glitch": False})
+            share.enqueue(entry)
+            assert share.queue_length() == 1
+            # senza consenso NON invia nulla (nemmeno con la coda piena)
+            assert share.flush() == 0 and share.queue_length() == 1
+            share.set_consent(False)
+            assert share.consent() == "no" and share.flush() == 0
+            share.set_consent(True)
+            assert share.consent() == "yes"
+            iid = share.install_id()
+            assert iid and len(iid) == 36              # uuid4 casuale
+            share.set_consent(True)
+            assert share.install_id() == iid           # stabile, non rigenerato
+    finally:
+        share._PREFS, share._QUEUE = orig_p, orig_q
+
+
+@test
+def share_flush_invia_al_collettore():
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+    import threading
+    from . import share
+
+    received = []
+
+    class H(BaseHTTPRequestHandler):
+        def do_POST(self):
+            body = self.rfile.read(int(self.headers.get("Content-Length", 0)))
+            received.append(json.loads(body))
+            self.send_response(204)
+            self.end_headers()
+
+        def log_message(self, *a):
+            pass
+
+    srv = HTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    orig_p, orig_q = share._PREFS, share._QUEUE
+    os.environ["SUDOBAT_KNOWLEDGE_ENDPOINT"] = f"http://127.0.0.1:{srv.server_port}/api/v1/sets"
+    try:
+        with tempfile.TemporaryDirectory() as td:
+            share._PREFS = Path(td) / "p.json"
+            share._QUEUE = Path(td) / "q.json"
+            share.set_consent(True)
+            share.enqueue(share.build_entry(system="ps2", game_id="X", game_title="",
+                                            tier="igpu-weak", emulator="pcsx2", core="",
+                                            settings={"pcsx2_resolution": 2},
+                                            flags={"fluido": True}))
+            assert share.flush() == 1 and share.queue_length() == 0
+            assert received and received[0]["schema"] == share.SCHEMA
+            assert received[0]["install_id"] == share.install_id()
+            assert received[0]["settings"] == {"pcsx2_resolution": 2}
+    finally:
+        os.environ.pop("SUDOBAT_KNOWLEDGE_ENDPOINT", None)
+        share._PREFS, share._QUEUE = orig_p, orig_q
+        srv.shutdown()
+
+
+@test
+def knowledge_valida_e_installa_community():
+    from . import knowledge
+    good = """
+games:
+  SLUS-205.60:
+    title: "GTA San Andreas"
+    tiers:
+      igpu-weak:
+        - settings: {pcsx2_gfxbackend: 12, pcsx2_resolution: 2}
+          confirmations: 4
+          emulator: pcsx2
+"""
+    evil = """
+games:
+  EVIL-01:
+    tiers:
+      igpu-weak:
+        - settings: {"chiave con spazi e simboli!!": "x"}
+        - settings: {pcsx2_ok: "valore_lunghissimo_oltre_il_cap_di_trentadue_caratteri_bloccato"}
+"""
+    with _PatchDataDir():
+        res = knowledge.install_from_files({"ps2.yaml": good, "evil.yaml": evil,
+                                            "../hax.yaml": good, "NO Valido!.yaml": good,
+                                            "rotto.yaml": "x: ["})
+        # passano ps2.yaml e ../hax.yaml (il path traversal viene NEUTRALIZZATO:
+        # basename dentro community/); evil (entry invalide), nome sporco e yaml
+        # rotto vengono scartati.
+        assert res == {"files": 2, "games": 2}, res
+        written = sorted(p.name for p in knowledge.community_dir().glob("*"))
+        assert written == ["hax.yaml", "ps2.yaml"], written
+        sets = catalog.community_sets("ps2", "SLUS-205.60", "igpu-weak")
+        assert len(sets) == 1 and sets[0]["confirmations"] == 4
+        assert sets[0]["settings"] == {"pcsx2_gfxbackend": 12, "pcsx2_resolution": 2}
+        assert catalog.community_sets("ps2", "SLUS-205.60", "dgpu-mid") == []
+        assert catalog.community_sets("evil", "EVIL-01", "igpu-weak") == []
+
+
 # ----------------------------------------------------------------- escalate
 @test
 def escalate_scala_delle_mosse():

@@ -21,6 +21,10 @@ Comandi:
                                     offline non riconosce; propone e prepara una regola nuova
   key [set <CHIAVE>|test|remove]   gestisce la TUA chiave API Groq personale (gratuita):
                                     senza argomenti mostra lo stato; guida: docs/GROQ_SETUP.it.md
+  share [on|off|flush]             condivisione opt-in dei set validati (stato/attiva/
+                                    disattiva; flush ritenta l'invio della coda)
+  knowledge update                 scarica la conoscenza community (set validati dagli
+                                    altri utenti) — il download non richiede consenso
   learn                            conferma e salva offline la regola preparata da `brain`
                                     (loop di distillazione: da qui in poi la riconosce da solo)
   history <system> <game_id>       storico esiti: quali set applicati e com'e' andata dopo
@@ -352,6 +356,51 @@ def cmd_key(args):
         print("Uso: key [set <CHIAVE> | test | remove]")
 
 
+def cmd_share(args):
+    """Stato e controllo della condivisione opt-in (vedi KNOWLEDGE_SHARING.md).
+    Nessun invio avviene mai senza consenso; qui si puo' dare/revocare."""
+    from . import share
+    if not args:
+        c = share.consent()
+        stato = {"yes": "ATTIVA", "no": "disattivata"}.get(c, "mai decisa (la UI chiede alla prima validazione)")
+        print(f"Condivisione set validati: {stato}")
+        if c == "yes":
+            print(f"Install id (casuale, per il quorum): {share.install_id()}")
+        q = share.queue_length()
+        if q:
+            print(f"In coda da inviare: {q} (share flush per ritentare)")
+        return
+    if args[0] == "on":
+        share.set_consent(True)
+        print("Condivisione ATTIVATA. Grazie: i tuoi set buoni aiuteranno gli altri.")
+    elif args[0] == "off":
+        share.set_consent(False)
+        print("Condivisione disattivata. Nessun dato verra' piu' inviato.")
+    elif args[0] == "flush":
+        sent = share.flush()
+        print(f"Inviati {sent} set (in coda restano {share.queue_length()}).")
+    else:
+        print("Uso: share [on|off|flush]")
+
+
+def cmd_knowledge(args):
+    """Scarica/aggiorna la conoscenza community dal repo pubblico sudobat-knowledge."""
+    from . import knowledge
+    if not args or args[0] != "update":
+        print("Uso: knowledge update")
+        return
+    try:
+        res = knowledge.update()
+    except Exception as e:
+        print(f"Aggiornamento fallito (rete? repo?): {e}")
+        return
+    if res["files"]:
+        print(f"Conoscenza community aggiornata: {res['games']} giochi in {res['files']} sistemi.")
+        print(f"Cartella: {knowledge.community_dir()}")
+    else:
+        print("Nessuna conoscenza community disponibile ancora (repo vuoto): riprova piu' avanti.")
+
+
 def cmd_learn():
     """Conferma umana del loop di distillazione: salva la regola candidata prodotta
     da `brain` nel file diagnostics, con backup. Da quel momento il crash e'
@@ -425,6 +474,10 @@ def main(argv):
         cmd_brain()
     elif cmd == "key":
         cmd_key(rest)
+    elif cmd == "share":
+        cmd_share(rest)
+    elif cmd == "knowledge":
+        cmd_knowledge(rest)
     elif cmd == "learn":
         cmd_learn()
     elif cmd == "history":

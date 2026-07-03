@@ -152,4 +152,16 @@ def profiles_for(system: str, game_id: str, tier: str, emulator: str, core: str 
                          "generated": False, "desc": "esperienza confermata buona da te",
                          "settings": validated})
 
+    # set della COMMUNITY (da sudobat-knowledge): proposte in piu', mai imposte.
+    # Entrano in coda alla lista e il rerank sugli esiti LOCALI resta l'autorita'.
+    if game_id:
+        for c in catalog.community_sets(system, game_id, tier):
+            if any(_same_settings(p["settings"], c["settings"]) for p in profs):
+                continue
+            n = c.get("confirmations", 1)
+            profs.append({"name": "Community", "recommended": False,
+                          "generated": False,
+                          "desc": f"convalidato da {n} installazioni",
+                          "settings": c["settings"]})
+
     return outcomes.rerank(profs, system, game_id)

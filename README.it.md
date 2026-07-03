@@ -124,6 +124,20 @@ La schermata Impostazioni mostra a colpo d'occhio lo stato del turbo (attivo / n
 
 ---
 
+## 🌍 Conoscenza community (opt-in)
+
+Le installazioni di SudoBat possono aiutarsi a vicenda: quando un set che hai validato come buona esperienza viene condiviso (col tuo consenso) e **almeno 3 installazioni indipendenti** confermano lo stesso set, finisce nel repo pubblico [sudobat-knowledge](https://github.com/masimoneext-sketch/sudobat-knowledge) e ogni SudoBat può scaricarlo — così i nuovi utenti partono con set provati sul campo.
+
+Come funziona il consenso, in totale trasparenza:
+
+- La **prima volta** che validi un set buono, SudoBat chiede una volta sola: condividere anonimamente, sì o no. La scelta viene ricordata ed è cambiabile quando vuoi in Impostazioni (`share on|off` da CLI)
+- **Cosa viene inviato** (tutto qui, non c'è altro): id/titolo del gioco, fascia hardware, emulatore/core, i settaggi, i flag esperienza, e un identificativo casuale dell'installazione (uuid, non derivato dal tuo hardware). Mai dati personali, mai percorsi file, mai IP conservati
+- **Niente consenso = zero traffico.** L'invio è silenzioso e best-effort; un invio fallito non ti disturba mai
+- **Scaricare** la conoscenza community non richiede consenso (sono dati pubblici): `python3 -m sudobat.cli knowledge update` — aggiornata anche dall'installer
+- I set community compaiono come opzioni in più marcate "Community (N conferme)"; i tuoi esiti locali le battono sempre
+
+Documento di progetto completo: [KNOWLEDGE_SHARING.md](KNOWLEDGE_SHARING.md).
+
 ## 🛡️ Reti di sicurezza
 
 Su un retro-box la config è sacra. Ogni scrittura di SudoBat è blindata:
@@ -152,7 +166,7 @@ Su un retro-box la config è sacra. Ogni scrittura di SudoBat è blindata:
 ### Verifica dell'installazione
 
 ```bash
-python3 -m sudobat.selftest       # 23 test del motore (config, hook, apprendimento) — nessuna scrittura sul sistema
+python3 -m sudobat.selftest       # 26 test del motore (config, hook, apprendimento, condivisione) — nessuna scrittura sul sistema
 python3 -m sudobat.ui --selftest  # test dell'interfaccia, headless
 ```
 

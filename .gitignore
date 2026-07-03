@@ -3,3 +3,4 @@ __pycache__/
 *.pyc
 state/groq_key.txt
 private/
+sudobat/data/community/

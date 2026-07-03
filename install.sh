@@ -72,6 +72,11 @@ else
     say "ATTENZIONE: selftest fallito. Dettagli: cd $DEST && python3 -m sudobat.selftest"
 fi
 
+# ------------------------------------------------- conoscenza community
+# Il DOWNLOAD della conoscenza e' innocuo e non richiede consenso (e' l'upload
+# dei propri set che sta dietro l'opt-in, chiesto dalla UI alla prima validazione).
+(cd "$DEST" && python3 -m sudobat.cli knowledge update) || say "conoscenza community: aggiornamento saltato (rete?)"
+
 # -------------------------------------------------------------- menu PORTS
 if [ "${SUDOBAT_REGISTER_PORT:-1}" = "1" ]; then
     if (cd "$DEST" && python3 -m tools.register_port); then

@@ -124,6 +124,20 @@ The Settings screen shows the turbo status at a glance (active / not set up). It
 
 ---
 
+## 🌍 Community knowledge (opt-in)
+
+SudoBat instances can help each other: when a set you validated as a good experience gets shared (with your consent), and **at least 3 independent installations** confirm the same set, it lands in the public [sudobat-knowledge](https://github.com/masimoneext-sketch/sudobat-knowledge) repo and every SudoBat can download it — so new users start with sets proven in the field.
+
+How consent works, in full transparency:
+
+- The **first time** you validate a good set, SudoBat asks once: share anonymously, yes or no. Your choice is remembered and changeable anytime in Settings (`share on|off` from the CLI)
+- **What is sent** (everything, there is nothing else): game id/title, hardware tier, emulator/core, the settings, the experience flags, and a random install identifier (uuid, not derived from your hardware). Never personal data, never file paths, never IPs stored
+- **No consent = zero traffic.** Sending is silent and best-effort; a failed send never bothers you
+- **Downloading** the community knowledge requires no consent (it's public data): `python3 -m sudobat.cli knowledge update` — also refreshed by the installer
+- Community sets appear as extra options marked "Community (N confirmations)"; your own local results always outrank them
+
+Full design document: [KNOWLEDGE_SHARING.md](KNOWLEDGE_SHARING.md).
+
 ## 🛡️ Safety nets
 
 On a retro box the config is sacred. Every write SudoBat makes is guarded:
@@ -152,7 +166,7 @@ On a retro box the config is sacred. Every write SudoBat makes is guarded:
 ### Verifying the installation
 
 ```bash
-python3 -m sudobat.selftest       # 23 engine tests (config, hook, learning) — no writes to the system
+python3 -m sudobat.selftest       # 26 engine tests (config, hook, learning, sharing) — no writes to the system
 python3 -m sudobat.ui --selftest  # UI test, headless
 ```
 

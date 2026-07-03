@@ -58,6 +58,22 @@ def get_profiles(system: str, game_id: str, tier: str) -> list:
     return (game.get("profiles") or {}).get(tier) or []
 
 
+def community_sets(system: str, game_id: str, tier: str) -> list:
+    """Set validati dalla COMMUNITY (scaricati da sudobat-knowledge in
+    data/community/) per gioco+fascia. Lista di {settings, confirmations,
+    emulator, core}. [] se non c'e' nulla. Separati dal catalogo locale:
+    nel rerank gli esiti dell'utente vincono sempre."""
+    path = _DATA_DIR / "community" / f"{system}.yaml"
+    if not path.exists():
+        return []
+    try:
+        data = yaml.safe_load(path.read_text()) or {}
+    except yaml.YAMLError:
+        return []
+    game = (data.get("games") or {}).get(game_id) or {}
+    return list((game.get("tiers") or {}).get(tier) or [])
+
+
 def validated_set(system: str, game_id: str, tier: str) -> dict | None:
     """Il set che l'utente ha confermato dare una BUONA esperienza per questo
     gioco su questa fascia hardware. None se non c'e' ancora (catalogo si popola

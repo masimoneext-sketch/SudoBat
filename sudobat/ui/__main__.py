@@ -72,6 +72,13 @@ def _selftest() -> int:
     a.dispatch(controls.DOWN); a.dispatch(controls.LEFT); a.draw_flags()  # una risposta -> No
     a.dispatch(controls.BACK)  # rimanda: torna al menu, niente scrittura
 
+    # schermata consenso condivisione: disegna, naviga, ed esce con B
+    # (nessuna decisione salvata, nessuna scrittura)
+    a._share_after = (["Test"], "main")
+    a.state = "share_consent"; a.menu_index = 0; a.draw_share_consent()
+    a.dispatch(controls.RIGHT); a.draw_share_consent()
+    a.dispatch(controls.BACK)   # decidi dopo: consenso resta non impostato
+
     a._flash(["Test messaggio"], "main"); a.draw_message()
 
     import pygame

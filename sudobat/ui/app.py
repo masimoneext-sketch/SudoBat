@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pygame
 
-from .. import catalog, config, diagnose as diag_mod, escalate, hardware, outcomes, roms, tuning
+from .. import catalog, config, diagnose as diag_mod, escalate, hardware, outcomes, roms, share, tuning
 from . import controls, paths, theme
 from .i18n import t
 from . import i18n
@@ -117,6 +117,13 @@ class App:
         self._pending_flags: dict | None = None
         self.flags_ctx: dict = {}
         self.flag_answers: dict = {}
+
+        # condivisione opt-in: entry in attesa della scelta + flash da mostrare dopo
+        self._share_entry: dict | None = None
+        self._share_after: tuple = ([], "main")
+        # coda condivisione: ritenta l'invio dei set gia' consentiti (silenzioso)
+        if share.consent() == "yes" and share.queue_length():
+            share.share_async()
 
     def _fonts(self) -> None:
         h = self.screen.get_height()
@@ -579,10 +586,12 @@ class App:
                                          ctx["tier"], ctx["settings"], flags)
                 _dbg(f"   CATALOGO: {ctx['game_id']} validato per fascia {ctx['tier']}")
                 self._load_diagnose(resolve_outcome=False)  # rilegge col validato in catalogo
-                self._flash([t("flash_good_title"),
-                             ctx["game_title"],
-                             t("flash_saved_catalog", tier=ctx["tier"]),
-                             t("flash_next_time")], "diagnose")
+                # condivisione opt-in: alla PRIMA validazione buona chiede una volta
+                # sola; se il consenso c'e' gia', invio automatico e silenzioso.
+                self._share_or_flash([t("flash_good_title"),
+                                      ctx["game_title"],
+                                      t("flash_saved_catalog", tier=ctx["tier"]),
+                                      t("flash_next_time")], ctx, flags)
             except Exception as e:
                 self._load_diagnose(resolve_outcome=False)
                 self._flash(["catalog write failed:", str(e)], "diagnose")
@@ -601,6 +610,80 @@ class App:
             self._flash([reason,
                          t("manual_notenough"),
                          t("manual_change_emu")], "diagnose")
+
+    # ------------------------------------------------- condivisione opt-in
+    def _share_or_flash(self, lines: list[str], ctx: dict, flags: dict) -> None:
+        """Dopo una validazione BUONA: se il consenso non e' mai stato chiesto,
+        mostra la schermata di scelta (una volta nella vita dell'installazione);
+        se e' 'yes' invia in automatico; se e' 'no' non fa nulla. Poi il flash."""
+        entry = share.build_entry(
+            system=ctx.get("system", ""), game_id=ctx.get("game_id", ""),
+            game_title=ctx.get("game_title", ""), tier=ctx.get("tier", ""),
+            emulator=ctx.get("emulator", ""), core=ctx.get("core", ""),
+            settings=ctx.get("settings", {}), flags=flags)
+        c = share.consent()
+        if c == "yes":
+            share.share_async(entry)
+            self._flash(lines, "diagnose")
+        elif c is None:
+            self._share_entry = entry
+            self._share_after = (lines, "diagnose")
+            self.menu_index = 0
+            self.state = "share_consent"
+            _dbg("-> schermata 'share_consent' (prima validazione buona)")
+        else:
+            self._flash(lines, "diagnose")
+
+    def on_share_consent(self, action: str) -> None:
+        if action in (controls.LEFT, controls.RIGHT, controls.UP, controls.DOWN):
+            self.menu_index = 1 - self.menu_index
+            return
+        if action == controls.BACK:
+            # nessuna decisione: non si salva nulla, si richiedera' la prossima volta
+            lines, nxt = self._share_after
+            self._share_entry = None
+            self._flash(lines, nxt)
+            return
+        if action == controls.CONFIRM:
+            yes = (self.menu_index == 0)
+            share.set_consent(yes)
+            _dbg(f"   SHARE: consenso={'si' if yes else 'no'}")
+            if yes and self._share_entry:
+                share.share_async(self._share_entry)
+            self._share_entry = None
+            lines, nxt = self._share_after
+            self._flash(lines, nxt)
+
+    def draw_share_consent(self) -> None:
+        w, h = self.screen.get_size()
+        theme.draw_background(self.screen)
+        panel = pygame.Rect(int(w * 0.12), int(h * 0.16), int(w * 0.76), int(h * 0.68))
+        theme.draw_panel(self.screen, panel, border=theme.NEON_AMBER)
+        y = panel.top + 20
+        theme.neon_text(self.screen, self.f_item, t("share_title"),
+                        center=(panel.centerx, y + self.f_item.get_height() // 2),
+                        color=theme.NEON_AMBER)
+        y += self.f_item.get_height() + 16
+        for ln in theme.wrap_text(self.f_small, t("share_body"), panel.width - 48):
+            self.screen.blit(self.f_small.render(ln, True, theme.WHITE), (panel.left + 24, y))
+            y += self.f_small.get_height() + 5
+        y += 6
+        for ln in theme.wrap_text(self.f_tiny, t("share_body2"), panel.width - 48):
+            self.screen.blit(self.f_tiny.render(ln, True, theme.DIM), (panel.left + 24, y))
+            y += self.f_tiny.get_height() + 4
+        # bottoni Si'/No
+        opts = [t("share_yes"), t("share_no")]
+        by = panel.bottom - 56
+        for i, opt in enumerate(opts):
+            bx = panel.left + 40 + i * int(panel.width * 0.48)
+            rect = pygame.Rect(bx, by, int(panel.width * 0.36), 40)
+            sel = (i == self.menu_index)
+            border = theme.NEON_GREEN if i == 0 else theme.DIM
+            if sel:
+                theme.draw_panel(self.screen, rect, border=border)
+            theme.neon_text(self.screen, self.f_small, opt, center=rect.center,
+                            color=(border if sel else theme.DIM), glow=False)
+        self._footer(t("footer_share"))
 
     def _draw_manual_advice(self, mf: dict, x: int, y: int, width: int) -> int:
         """Riquadro ambra: cosa non puo' fare SudoBat, PERCHE', e cosa deve fare
@@ -878,18 +961,21 @@ class App:
     # -------------------------------------------------------------- settings
     def on_settings(self, action: str) -> None:
         # righe attive: 0 = Lingua (A/Sx/Dx cambia), 1 = Ripristina ultimo backup
-        # (A apre la conferma). Le altre righe sono solo informative.
+        # (A apre la conferma), 2 = Condivisione set (toggle). Le altre sono info.
         if action == controls.BACK:
             self.enter("main")
             return
         if action in (controls.UP, controls.DOWN):
-            self.move(2, action)
+            self.move(3, action)
             return
         if self.menu_index == 0 and action in (controls.CONFIRM, controls.LEFT, controls.RIGHT):
             i18n.toggle()
             self._fonts()  # nel caso cambi metrica testo
         elif self.menu_index == 1 and action == controls.CONFIRM:
             self._ask_restore()
+        elif self.menu_index == 2 and action in (controls.CONFIRM, controls.LEFT, controls.RIGHT):
+            share.set_consent(share.consent() != "yes")
+            _dbg(f"   SHARE: toggle da impostazioni -> {share.consent()}")
 
     def _ask_restore(self) -> None:
         """"Annulla ultima modifica" a portata di gamepad: propone il ripristino di
@@ -929,10 +1015,13 @@ class App:
             turbo_val = t("turbo_on", tail=ks["masked"]) if ks["configured"] else t("turbo_off")
         except Exception:
             turbo_val = "?"
+        share_val = {"yes": t("share_state_on"), "no": t("share_state_off")}.get(
+            share.consent(), t("share_state_unset"))
         # terzo campo: indice della riga ATTIVA (None = riga solo informativa)
         rows = [
             (t("set_language"), i18n.t("lang_name"), 0),
             (t("set_restore"), latest.name if latest else t("set_nobackup"), 1),
+            (t("set_share"), share_val, 2),
             (t("set_turbo"), turbo_val, None),
             (t("set_hook"), t("set_installed") if hook_installed else t("set_notinstalled"), None),
             (t("set_conf"), str(config.BATOCERA_CONF_PATH), None),

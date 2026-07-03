@@ -99,6 +99,20 @@ STRINGS = {
         "set_turbo": "Turbo AI (Groq)",
         "turbo_on": "attivo — chiave {tail}",
         "turbo_off": "non configurato — guida: docs/GROQ_SETUP.it.md",
+        # condivisione opt-in dei set validati (community knowledge)
+        "share_title": "Aiuta gli altri giocatori?",
+        "share_body": ("Vuoi condividere anonimamente i set che funzionano, per "
+                       "aiutare gli altri utenti?"),
+        "share_body2": ("Verranno inviati solo: gioco, fascia hardware, emulatore, "
+                        "settaggi e un identificativo casuale dell'installazione. "
+                        "Mai dati personali. Cambiabile quando vuoi in Impostazioni."),
+        "share_yes": "Si', condividi",
+        "share_no": "No",
+        "footer_share": "Sx/Dx: scegli   A: conferma   B: decidi dopo",
+        "set_share": "Condivisione set",
+        "share_state_on": "attiva — grazie!",
+        "share_state_off": "disattivata",
+        "share_state_unset": "da decidere (te lo chiedo alla prima validazione)",
         # footer / dialoghi
         "footer_main": "Su/Giu: scegli   A: conferma   B: esci",
         "footer_back": "B: indietro",
@@ -246,6 +260,19 @@ STRINGS = {
         "set_turbo": "AI turbo (Groq)",
         "turbo_on": "active — key {tail}",
         "turbo_off": "not set up — guide: docs/GROQ_SETUP.md",
+        "share_title": "Help other players?",
+        "share_body": ("Would you like to anonymously share the sets that work, "
+                       "to help other users?"),
+        "share_body2": ("Only this gets sent: game, hardware tier, emulator, "
+                        "settings and a random install identifier. Never personal "
+                        "data. You can change this anytime in Settings."),
+        "share_yes": "Yes, share",
+        "share_no": "No",
+        "footer_share": "Left/Right: choose   A: confirm   B: decide later",
+        "set_share": "Set sharing",
+        "share_state_on": "on — thank you!",
+        "share_state_off": "off",
+        "share_state_unset": "undecided (asked at your first validation)",
         "footer_main": "Up/Down: choose   A: confirm   B: quit",
         "footer_back": "B: back",
         "footer_diag": "Up/Down: choose set   A: apply (with backup)   B: back",
