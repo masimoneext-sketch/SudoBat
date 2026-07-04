@@ -24,6 +24,11 @@ _LAUNCH_LOG_PATHS = [
 # piuttosto che uno stop volontario dell'utente.
 _CRASH_THRESHOLD_SECONDS = 15
 
+# Sotto questa durata una sessione finita pulita e' "corta": troppo poco gioco per
+# un giudizio pieno, ma abbastanza perche' valga la pena chiedere (magari hai
+# smesso presto proprio perche' era ingiocabile).
+_SHORT_SESSION_SECONDS = 60
+
 # Emulatore (come compare nell'hook/batocera.conf) -> file diagnostics/<...>.yaml da usare.
 _EMULATOR_TO_DIAGNOSTICS_KEY = {
     "pcsx2": "pcsx2",
@@ -99,7 +104,11 @@ def collect_fixes(result: dict) -> list:
     return fixes
 
 
-def diagnose() -> dict:
+def diagnose(assume_crash: bool = False) -> dict:
+    """assume_crash=True: l'UTENTE ha detto che il gioco si e' chiuso da solo.
+    E' il segnale che la macchina non puo' vedere (un crash dopo 20 minuti sembra
+    identico a un'uscita voluta): si forza la lettura dei log emulatore come per
+    un crash sospetto. Generico per qualunque sistema/emulatore."""
     launch = read_last_launch()
     if not launch:
         return {"error": "nessun lancio tracciato (hook non installato o mai lanciato un gioco)"}
@@ -114,6 +123,8 @@ def diagnose() -> dict:
         if delta >= 0:
             duration = delta
             suspected_crash = duration < _CRASH_THRESHOLD_SECONDS
+    if assume_crash:
+        suspected_crash = True
 
     system = launch.get("system", "")
     emulator = launch.get("emulator", "")
@@ -147,6 +158,7 @@ def diagnose() -> dict:
         "stop": stop,
         "duration_seconds": duration,
         "suspected_crash": suspected_crash,
+        "session_verdict": session_verdict(duration, suspected_crash, emulator_crashes),
         "game_id": game_id,
         "game": game,
         "hardware_tier": tier,
@@ -154,3 +166,24 @@ def diagnose() -> dict:
         "matched_diagnostic_rules": matched_rules,
         "emulator_crashes": emulator_crashes,
     }
+
+
+def session_verdict(duration, suspected_crash, emulator_crashes) -> str:
+    """Classifica l'ultima sessione con i SOLI segnali universali (durata dall'hook,
+    regole log imparate): niente pattern per-emulatore.
+
+      'crash'   -> se ne occupa la diagnosi, inutile chiedere com'e' andata
+      'clean'   -> finita regolarmente e giocata abbastanza: si chiede il giudizio
+      'short'   -> finita regolarmente ma subito: si chiede comunque (magari hai
+                   smesso perche' era ingiocabile -- solo tu puoi dirlo)
+      'unknown' -> nessuno stop registrato (forse ancora in corso): non si giudica
+
+    Il caso che la macchina NON vede -- crash tardivo con log muto -- lo copre la
+    domanda diretta all'utente nel questionario (vedi diagnose(assume_crash=True))."""
+    if suspected_crash or emulator_crashes:
+        return "crash"
+    if duration is None:
+        return "unknown"
+    if duration >= _SHORT_SESSION_SECONDS:
+        return "clean"
+    return "short"

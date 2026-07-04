@@ -244,6 +244,43 @@ def outcomes_flusso_pending_flag_storico():
 
 
 @test
+def outcomes_sessione_osservata_e_guardia_lancio():
+    """Questionario universale: una sessione SENZA apply diventa storico coi flag
+    (record 'osservato'), e la guardia anti-molestia chiede una volta per lancio."""
+    with _PatchStore():
+        orig_judged = outcomes._JUDGED_FILE
+        outcomes._JUDGED_FILE = outcomes._STORE.parent / "judged_launch.json"
+        try:
+            outcomes.note_observed("switch", "01006b601380e000", {}, game_title="Kirby RtDL")
+            pend = outcomes.pending_for("switch", "01006b601380e000")
+            assert pend and pend["source"] == "osservato" and pend["settings"] == {}
+            good = {"fluido": True, "fps_ok": True, "scatti_concitate": False, "glitch": False}
+            rec = outcomes.resolve_flags("switch", "01006b601380e000", good)
+            assert rec and rec["result"] == "good"
+            tr = outcomes.track_record("switch", "01006b601380e000", {})
+            assert tr == {"ok": 1, "crash": 0}
+
+            assert not outcomes.already_judged(1234567)
+            outcomes.mark_judged(1234567)
+            assert outcomes.already_judged(1234567)
+            assert not outcomes.already_judged(7654321)  # un lancio nuovo si giudica
+        finally:
+            outcomes._JUDGED_FILE = orig_judged
+
+
+@test
+def diagnose_verdetto_sessione():
+    """Classificatore a 3 esiti sui SOLI segnali universali (durata, regole log):
+    crash -> diagnosi; clean/short -> questionario; unknown -> non si giudica."""
+    sv = diagnose.session_verdict
+    assert sv(None, None, []) == "unknown"          # nessuno stop registrato
+    assert sv(8, True, []) == "crash"               # morto subito
+    assert sv(1200, False, [{"cause": "x"}]) == "crash"  # fatal riconosciuto nel log
+    assert sv(1200, False, []) == "clean"           # 20 min finiti puliti
+    assert sv(30, False, []) == "short"             # uscito subito: chiedi comunque
+
+
+@test
 def outcomes_rerank_promuove_gli_esiti_reali():
     with _PatchStore():
         s_eur = {"pcsx2_resolution": "4"}   # euristica, ma sul campo crasha

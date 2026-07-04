@@ -55,6 +55,39 @@ def note_applied(system: str, game_id: str, settings: dict, *, source: str = "",
     _save(records)
 
 
+def note_observed(system: str, game_id: str, settings: dict, *, game_title: str = "") -> None:
+    """Come note_applied, ma per una sessione OSSERVATA: nessun set applicato da
+    SudoBat, si registra com'e' andata coi settaggi correnti del gioco (anche
+    nessun override = {}). E' cio' che rende il questionario universale: ogni
+    partita giudicata diventa storico, non solo quelle dopo un apply."""
+    records = _load()
+    records.append({
+        "when": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "ts": int(time.time()),
+        "system": system, "game_id": game_id, "game": game_title,
+        "settings": settings or {}, "settings_key": _norm(settings),
+        "source": "osservato", "result": "pending",
+    })
+    _save(records)
+
+
+# Guardia anti-molestia del questionario universale: si chiede UNA volta per lancio
+# (che tu risponda o rimandi), riconoscendo il lancio dal suo timestamp hook.
+_JUDGED_FILE = _STORE.parent / "judged_launch.json"
+
+
+def already_judged(launch_ts: float) -> bool:
+    try:
+        return json.loads(_JUDGED_FILE.read_text()).get("launch_ts") == launch_ts
+    except (ValueError, OSError):
+        return False
+
+
+def mark_judged(launch_ts: float) -> None:
+    _JUDGED_FILE.parent.mkdir(parents=True, exist_ok=True)
+    _JUDGED_FILE.write_text(json.dumps({"launch_ts": launch_ts}))
+
+
 def resolve(system: str, game_id: str, outcome: str) -> dict | None:
     """Assegna l'esito ('ok'/'crash') all'ultimo record 'pending' del gioco.
     Ritorna il record risolto, o None se non c'era nulla in sospeso."""

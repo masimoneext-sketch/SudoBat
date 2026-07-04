@@ -57,6 +57,12 @@ FLAG_DEFS = [
     ("glitch", "flag_glitch"),
 ]
 
+# Prima domanda del questionario: il gioco si e' chiuso DA SOLO? Distingue un
+# crash tardivo (che nei numeri sembra un'uscita voluta) da un'esperienza da
+# giudicare. E' il sensore che nessun log puo' sostituire, e vale identico per
+# qualunque sistema/emulatore.
+CRASH_FLAG = ("crashed", "flag_crashed")
+
 
 class App:
     def __init__(self, headless: bool = False) -> None:
@@ -117,6 +123,7 @@ class App:
         self._pending_flags: dict | None = None
         self.flags_ctx: dict = {}
         self.flag_answers: dict = {}
+        self.flag_rows: list = []
 
         # condivisione opt-in: entry in attesa della scelta + flash da mostrare dopo
         self._share_entry: dict | None = None
@@ -180,9 +187,9 @@ class App:
         self.state = state
 
     # ----------------------------------------------------------- caricamenti
-    def _load_diagnose(self, resolve_outcome: bool = True) -> None:
+    def _load_diagnose(self, resolve_outcome: bool = True, assume_crash: bool = False) -> None:
         try:
-            self.diag = diag_mod.diagnose()
+            self.diag = diag_mod.diagnose(assume_crash=assume_crash)
         except Exception as e:  # difensivo: la UI non deve mai crashare
             self.diag = {"error": f"errore diagnosi: {e}"}
         self.tuning = []
@@ -212,18 +219,34 @@ class App:
         # (NON dopo un apply immediato: li' resolve_outcome=False, la sessione col
         #  nuovo set deve ancora avvenire.)
         if resolve_outcome and rid:
+            launch_ts = self.diag.get("launch", {}).get("timestamp", 0) or 0
+            crashed = bool(self.diag.get("suspected_crash") or self.diag.get("emulator_crashes"))
             pending = outcomes.pending_for(system, rid)
             if pending:
-                if self.diag.get("suspected_crash") or self.diag.get("emulator_crashes"):
+                if crashed:
                     # crash: esito ovvio, non ti chiedo se "girava fluido".
                     outcomes.resolve(system, rid, "crash")
                     _dbg(f"   ESITO: crash auto-risolto per {rid}")
-                else:
+                elif launch_ts and launch_ts > (pending.get("ts") or 0):
                     # hai rigiocato DOPO l'apply? allora chiedo il giudizio (flag).
-                    launch_ts = self.diag.get("launch", {}).get("timestamp", 0) or 0
-                    if launch_ts and launch_ts > (pending.get("ts") or 0):
-                        self._pending_flags = pending
-                        _dbg(f"   ESITO: giudizio in sospeso per {rid} -> chiedo i flag")
+                    self._pending_flags = pending
+                    _dbg(f"   ESITO: giudizio in sospeso per {rid} -> chiedo i flag")
+            elif (not crashed
+                  and self.diag.get("session_verdict") in ("clean", "short")
+                  and launch_ts and not outcomes.already_judged(launch_ts)):
+                # QUESTIONARIO UNIVERSALE: nessun apply in sospeso, sessione finita
+                # regolarmente -> si chiede comunque com'e' andata, per OGNI gioco di
+                # OGNI emulatore. Buona -> si valida a catalogo; storta -> set piu'
+                # leggero. E' il core dell'auto-tuning, non un'appendice del crash.
+                romfile = Path(self.diag.get("launch", {}).get("rom", "")).name
+                self._pending_flags = {
+                    "system": system, "game_id": rid,
+                    "game": (self.diag.get("game") or {}).get("title") or romfile,
+                    "settings": self._current_overrides(system, romfile, emu, core),
+                    "observed": True, "launch_ts": launch_ts,
+                }
+                _dbg(f"   ESITO: sessione '{self.diag.get('session_verdict')}' senza apply "
+                     f"per {rid} -> questionario universale")
 
         # set grafici: GENERATI dal motore (o override dal catalogo), con ★ e verdetti
         # gia' ri-ordinati dagli esiti reali (tuning.profiles_for -> outcomes.rerank).
@@ -494,10 +517,21 @@ class App:
         self._flash(lines, "diagnose")
 
     # ------------------------------------------------- flag di fine partita
+    def _current_overrides(self, system: str, romfile: str, emu: str, core: str) -> dict:
+        """Gli override grafici per-gioco ATTUALI in batocera.conf (quelli con cui la
+        sessione e' girata davvero), limitati alle manopole note dell'emulatore.
+        {} se il gioco gira coi default: anche quello e' un esito da registrare."""
+        try:
+            values = config.parse()
+            return {k: v for k in tuning.known_keys(emu, core)
+                    if (v := config.get_game_override(values, system, romfile, k)) is not None}
+        except Exception:
+            return {}
+
     def _start_flags(self, record: dict) -> None:
-        """Prepara il questionario 'com'e' andata?' per il set applicato di cui
-        aspettiamo il giudizio. Il contesto (gioco/fascia/emulatore/set) viene dal
-        record pending + dalla diagnosi corrente."""
+        """Prepara il questionario 'com'e' andata?'. Il contesto viene dal record
+        pending (set applicato di cui aspettiamo il giudizio) oppure dal record
+        'osservato' (questionario universale: sessione senza apply)."""
         launch = self.diag.get("launch", {})
         self.flags_ctx = {
             "system": record["system"],
@@ -508,25 +542,31 @@ class App:
             "settings": record.get("settings", {}),
             "emulator": launch.get("emulator", ""),
             "core": launch.get("core", ""),
+            "observed": bool(record.get("observed")),
         }
+        # sessione osservata: una domanda sola per lancio, che tu risponda o rimandi
+        # (il percorso post-apply invece ri-chiede: c'e' un esito pending da chiudere).
+        if self.flags_ctx["observed"] and record.get("launch_ts"):
+            outcomes.mark_judged(record["launch_ts"])
         # default sul percorso 'buono': l'utente cambia solo cio' che e' andato storto.
-        self.flag_answers = {"fluido": True, "fps_ok": True,
+        self.flag_answers = {"crashed": False, "fluido": True, "fps_ok": True,
                              "scatti_concitate": False, "glitch": False}
+        self.flag_rows = [CRASH_FLAG] + list(FLAG_DEFS)
         self.menu_index = 0
         self.state = "flags"
         _dbg(f"-> schermata 'flags' per {self.flags_ctx['game_id']} "
-             f"set={self.flags_ctx['settings']}")
+             f"set={self.flags_ctx['settings']} osservato={self.flags_ctx['observed']}")
 
     def on_flags(self, action: str) -> None:
-        n = len(FLAG_DEFS) + 1  # +1 = riga "Conferma"
+        n = len(self.flag_rows) + 1  # +1 = riga "Conferma"
         if action == controls.BACK:
             self.enter("main")   # rimanda il giudizio: il record resta pending
             return
         if action in (controls.UP, controls.DOWN):
             self.move(n, action)
             return
-        if self.menu_index < len(FLAG_DEFS):
-            key = FLAG_DEFS[self.menu_index][0]
+        if self.menu_index < len(self.flag_rows):
+            key = self.flag_rows[self.menu_index][0]
             if action == controls.LEFT:
                 self.flag_answers[key] = False
             elif action == controls.RIGHT:
@@ -547,7 +587,7 @@ class App:
                         color=theme.NEON_CYAN, glow=False)
         y = int(h * 0.28)
         line_h = self.f_item.get_height() + 26
-        for i, (key, qkey) in enumerate(FLAG_DEFS):
+        for i, (key, qkey) in enumerate(self.flag_rows):
             sel = (self.menu_index == i)
             rect = pygame.Rect(int(w * 0.07), y - 6, int(w * 0.86), line_h - 10)
             if sel:
@@ -563,7 +603,7 @@ class App:
                 theme.neon_text(self.screen, self.f_item, lbl, center=(bx, cy),
                                 color=col, glow=(on and sel))
             y += line_h
-        sel = (self.menu_index == len(FLAG_DEFS))
+        sel = (self.menu_index == len(self.flag_rows))
         rect = pygame.Rect(int(w * 0.07), y - 6, int(w * 0.86), line_h - 10)
         if sel:
             theme.draw_panel(self.screen, rect, border=theme.NEON_GREEN)
@@ -574,7 +614,23 @@ class App:
 
     def _submit_flags(self) -> None:
         ctx = self.flags_ctx
+        if self.flag_answers.get("crashed"):
+            # L'utente dice che si e' chiuso DA SOLO: e' un CRASH anche se la durata
+            # sembrava sana (il crash tardivo che la macchina non vede). L'esito va
+            # a storico e si rifa' la diagnosi coi log emulatore, come per ogni crash.
+            if ctx.get("observed"):
+                outcomes.note_observed(ctx["system"], ctx["game_id"], ctx.get("settings", {}),
+                                       game_title=ctx.get("game_title", ""))
+            outcomes.resolve(ctx["system"], ctx["game_id"], "crash")
+            _dbg(f"   FLAGS: crash riferito dall'utente per {ctx['game_id']} -> ridiagnosi dai log")
+            self._load_diagnose(resolve_outcome=False, assume_crash=True)
+            self._flash([t("flash_usercrash_title"), t("flash_usercrash_body")], "diagnose")
+            return
         flags = {k: bool(self.flag_answers.get(k)) for k in outcomes.FLAG_KEYS}
+        if ctx.get("observed"):
+            # sessione senza apply: il record nasce adesso e si risolve subito coi flag
+            outcomes.note_observed(ctx["system"], ctx["game_id"], ctx.get("settings", {}),
+                                   game_title=ctx.get("game_title", ""))
         outcomes.resolve_flags(ctx["system"], ctx["game_id"], flags)
         mv = escalate.next_move(ctx["system"], ctx["emulator"], ctx["tier"],
                                 ctx["settings"], flags, core=ctx.get("core", ""))

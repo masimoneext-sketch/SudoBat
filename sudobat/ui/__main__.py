@@ -25,7 +25,10 @@ def _selftest() -> int:
     a.draw_main()
     a.dispatch(controls.DOWN); a.draw_main()
 
-    a.enter("diagnose"); a.draw_diagnose()
+    # diagnosi SENZA risolvere gli esiti: il selftest non deve consumare il
+    # giudizio (questionario) della sessione reale dell'utente.
+    a._load_diagnose(resolve_outcome=False)
+    a.state = "diagnose"; a.draw_diagnose()
     if a.tuning:                   # naviga i profili ma NON confermare (niente scrittura)
         a.dispatch(controls.DOWN); a.draw_diagnose()
         a._ask_apply(a.tuning[0]); a.draw_confirm()  # apre il dialog (dry-run) e lo disegna
@@ -34,7 +37,8 @@ def _selftest() -> int:
     # schermata turbo Groq: disegna sia lo stato "in corso" sia quello "risposta"
     a.state = "brain"; a.brain_loading = True; a.draw_brain()
     a.brain_loading = False; a.brain_sug = None; a.draw_brain()
-    a.enter("diagnose")  # torna indietro come farebbe on_brain(BACK)
+    a._load_diagnose(resolve_outcome=False)  # torna indietro come on_brain(BACK), senza consumare esiti
+    a.state = "diagnose"
 
     a.enter("howto"); a.draw_howto()
 
