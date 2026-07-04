@@ -9,12 +9,16 @@ quali opzioni contano per le prestazioni (risoluzione/scala/filtri/blending/AA).
 """
 from __future__ import annotations
 
+import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-_PATHS = [
-    Path("/userdata/system/configs/emulationstation/es_features.cfg"),
-    Path("/usr/share/emulationstation/es_features.cfg"),
+# EmulationStation fonde TUTTI gli es_features*.cfg (l'ufficiale + quelli degli
+# add-on, es. es_features_switch.cfg installato dal pacchetto Switch): quindi
+# anche noi. Prima userdata (override dell'utente), poi il sistema.
+_DIRS = [
+    Path("/userdata/system/configs/emulationstation"),
+    Path("/usr/share/emulationstation"),
 ]
 
 # opzioni che incidono sul CARICO grafico (match su chiave o nome, case-insensitive)
@@ -23,22 +27,38 @@ _PERF_KW = ("resolution", "scale", "upscal", "supersampl", "internal", "render",
 # l'asse DOMINANTE: la risoluzione/scala interna
 _PRIMARY_KW = ("resolution", "scale", "upscal", "supersampl", "internal")
 
-_root_cache: ET.Element | None = None
-_loaded = False
+_roots_cache: list[ET.Element] | None = None
+
+# '&' nudo non seguito da un'entita' XML valida: va escapato per il parser strict
+_BARE_AMP = re.compile(r"&(?!amp;|lt;|gt;|quot;|apos;|#)")
 
 
-def _root() -> ET.Element | None:
-    global _root_cache, _loaded
-    if not _loaded:
-        _loaded = True
-        for p in _PATHS:
-            if p.exists():
-                try:
-                    _root_cache = ET.parse(p).getroot()
-                    break
-                except ET.ParseError:
-                    continue
-    return _root_cache
+def _parse_lenient(path: Path) -> ET.Element | None:
+    """Parse XML; se fallisce riprova escapando gli '&' nudi. I cfg degli add-on
+    sono spesso scritti a mano e ES li tollera: meglio leggerli che scartarli.
+    Il file su disco NON viene mai modificato."""
+    try:
+        return ET.parse(path).getroot()
+    except ET.ParseError:
+        pass
+    except OSError:
+        return None
+    try:
+        return ET.fromstring(_BARE_AMP.sub("&amp;", path.read_text(errors="replace")))
+    except (ET.ParseError, OSError):
+        return None
+
+
+def _roots() -> list[ET.Element]:
+    global _roots_cache
+    if _roots_cache is None:
+        _roots_cache = []
+        for d in _DIRS:
+            for p in sorted(d.glob("es_features*.cfg")):
+                root = _parse_lenient(p)
+                if root is not None:
+                    _roots_cache.append(root)
+    return _roots_cache
 
 
 def _is_number(s: str) -> bool:
@@ -60,15 +80,22 @@ def _numeric_choices(feat: ET.Element) -> list[tuple[str, str]] | None:
     return num
 
 
+def _find_emulator(name: str) -> ET.Element | None:
+    """Cerca l'emulatore in tutti i file caricati (vince il primo trovato:
+    l'ordine e' userdata prima del sistema, come fa EmulationStation)."""
+    for root in _roots():
+        node = next((e for e in root.findall("emulator") if e.get("name") == name), None)
+        if node is not None:
+            return node
+    return None
+
+
 def _emulator_features(emulator: str, core: str = "") -> list[ET.Element]:
     """Tutti i <feature> validi per questo emulatore (+ core specifico se dato)."""
-    root = _root()
-    if root is None:
-        return []
-    node = next((e for e in root.findall("emulator") if e.get("name") == emulator), None)
+    node = _find_emulator(emulator)
     # fallback: a volte il 'core' e' registrato come emulatore top-level (standalone)
     if node is None and core:
-        node = next((e for e in root.findall("emulator") if e.get("name") == core), None)
+        node = _find_emulator(core)
     if node is None:
         return []
     feats = list(node.findall("feature"))          # feature dirette dell'emulatore
