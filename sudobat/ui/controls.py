@@ -42,7 +42,9 @@ class InputManager:
         # priorita': default < es_input.cfg (il pad come l'ha configurato l'utente
         # in ES: la realta', non una presunzione) < mappatura salvata da SudoBat.
         es = self._mapping_from_es()
-        self.from_es = bool(es)   # la UI propone il wizard solo se ES non sa nulla
+        # 'completo' solo se ES conosce TUTTI e tre i tasti: se ne manca anche uno
+        # (pad con select su asse/hat, cfg parziale) la UI propone il wizard.
+        self.from_es = bool(es) and all(k in es for k in ("confirm", "back", "select"))
         if es:
             self.mapping.update(es)
         self._load_mapping()
