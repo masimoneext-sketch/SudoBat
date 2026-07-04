@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pygame
 
-from .. import catalog, config, diagnose as diag_mod, escalate, hardware, outcomes, roms, share, tuning
+from .. import catalog, config, diagnose as diag_mod, escalate, hardware, outcomes, roms, share, tuning, update
 from . import controls, paths, theme
 from .i18n import t
 from . import i18n
@@ -131,6 +131,13 @@ class App:
         # coda condivisione: ritenta l'invio dei set gia' consentiti (silenzioso)
         if share.consent() == "yes" and share.queue_length():
             share.share_async()
+
+        # controllo aggiornamenti: in background (mai bloccante), max 1/giorno,
+        # senza rete tace. MAI automatico: si propone in Impostazioni.
+        self.update_available: str | None = None
+        self.update_running = False
+        if not self.headless:
+            update.check_async(self._on_update_check)
 
     def _fonts(self) -> None:
         h = self.screen.get_height()
@@ -334,6 +341,11 @@ class App:
         w, h = self.screen.get_size()
         theme.draw_background(self.screen)
         self._title_bar("SudoBat")
+        if self.update_available:
+            theme.neon_text(self.screen, self.f_small,
+                            t("update_banner", ver=self.update_available),
+                            center=(w // 2, int(h * 0.22)),
+                            color=theme.NEON_AMBER, glow=False)
         labels = [t(k) for k, _ in MAIN_ITEMS]
         self._draw_menu(labels, self.menu_index, top=int(h * 0.30))
         self._footer(t("footer_main"))
@@ -1017,12 +1029,13 @@ class App:
     # -------------------------------------------------------------- settings
     def on_settings(self, action: str) -> None:
         # righe attive: 0 = Lingua (A/Sx/Dx cambia), 1 = Ripristina ultimo backup
-        # (A apre la conferma), 2 = Condivisione set (toggle). Le altre sono info.
+        # (A apre la conferma), 2 = Condivisione set (toggle), 3 = Aggiorna SudoBat
+        # (A: aggiorna se c'e' una release nuova, altrimenti ricontrolla adesso).
         if action == controls.BACK:
             self.enter("main")
             return
         if action in (controls.UP, controls.DOWN):
-            self.move(3, action)
+            self.move(4, action)
             return
         if self.menu_index == 0 and action in (controls.CONFIRM, controls.LEFT, controls.RIGHT):
             i18n.toggle()
@@ -1032,6 +1045,51 @@ class App:
         elif self.menu_index == 2 and action in (controls.CONFIRM, controls.LEFT, controls.RIGHT):
             share.set_consent(share.consent() != "yes")
             _dbg(f"   SHARE: toggle da impostazioni -> {share.consent()}")
+        elif self.menu_index == 3 and action == controls.CONFIRM:
+            self._on_update_row()
+
+    # --------------------------------------------------------- aggiornamento
+    def _on_update_check(self, res: dict) -> None:
+        """Callback del controllo in background all'avvio (thread)."""
+        if res.get("available"):
+            self.update_available = res.get("remote")
+            _dbg(f"   UPDATE: disponibile {res['remote']} (locale {res['local']})")
+
+    def _on_update_row(self) -> None:
+        """Riga 'Aggiorna SudoBat': se c'e' una release nuova la propone (conferma
+        esplicita); altrimenti ricontrolla ADESSO e dice come stanno le cose."""
+        if self.update_running:
+            return
+        if self.update_available:
+            self._ask([t("update_q", ver=self.update_available), "",
+                       t("update_note")], self._do_update, "settings")
+            return
+        res = update.check(force=True)  # richiesta esplicita: ok aspettare ~3s
+        if res.get("available"):
+            self.update_available = res["remote"]
+            self._ask([t("update_q", ver=res["remote"]), "",
+                       t("update_note")], self._do_update, "settings")
+        elif res.get("remote") is None:
+            self._flash([t("update_nonet")], "settings")
+        else:
+            self._flash([t("update_uptodate", ver=res["local"])], "settings")
+
+    def _do_update(self) -> None:
+        """Esegue l'installer ufficiale in un thread; la schermata messaggio fa da
+        progresso e NON si puo' chiudere finche' non c'e' l'esito (onesto)."""
+        self.update_running = True
+        self._flash([t("update_running")], "settings")
+        threading.Thread(target=self._update_worker, daemon=True).start()
+
+    def _update_worker(self) -> None:
+        res = update.run_installer()
+        self.update_running = False
+        _dbg(f"   UPDATE: installer ok={res.get('ok')}")
+        if res.get("ok"):
+            self.update_available = None
+            self.msg_lines = [t("update_done"), t("update_restart")]
+        else:
+            self.msg_lines = [t("update_fail")] + (res.get("output") or "").splitlines()[-3:]
 
     def _ask_restore(self) -> None:
         """"Annulla ultima modifica" a portata di gamepad: propone il ripristino di
@@ -1074,10 +1132,13 @@ class App:
         share_val = {"yes": t("share_state_on"), "no": t("share_state_off")}.get(
             share.consent(), t("share_state_unset"))
         # terzo campo: indice della riga ATTIVA (None = riga solo informativa)
+        upd_val = (t("update_avail", ver=self.update_available) if self.update_available
+                   else t("update_current", ver=update.local_version()))
         rows = [
             (t("set_language"), i18n.t("lang_name"), 0),
             (t("set_restore"), latest.name if latest else t("set_nobackup"), 1),
             (t("set_share"), share_val, 2),
+            (t("set_update"), upd_val, 3),
             (t("set_turbo"), turbo_val, None),
             (t("set_hook"), t("set_installed") if hook_installed else t("set_notinstalled"), None),
             (t("set_conf"), str(config.BATOCERA_CONF_PATH), None),
@@ -1153,6 +1214,8 @@ class App:
         self.state = "message"
 
     def on_message(self, action: str) -> None:
+        if self.update_running:
+            return  # aggiornamento in corso: il messaggio-progresso non si chiude
         if action in (controls.CONFIRM, controls.BACK, controls.SELECT):
             self.state = self.msg_next
             self.menu_index = 0

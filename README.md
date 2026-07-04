@@ -56,7 +56,7 @@ Then one last manual step, once: in EmulationStation → **Menu → Game setting
 4. runs the 23-test selftest to verify the installation (no writes to the system)
 5. registers SudoBat in the PORTS menu, with logo and animated preview
 
-**Re-running the same command updates SudoBat** to the latest version.
+**Re-running the same command updates SudoBat** to the latest version. And since v1.2 you don't even need to remember: SudoBat checks once a day for new releases and offers the update in **Settings** — never automatic, always behind your confirmation.
 
 <details>
 <summary>Prefer doing it by hand? The 3 equivalent steps</summary>

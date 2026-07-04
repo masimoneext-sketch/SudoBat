@@ -56,7 +56,7 @@ Poi un ultimo passo a mano, una volta sola: in EmulationStation → **Menu → I
 4. esegue il selftest da 23 test per verificare l'installazione (nessuna scrittura sul sistema)
 5. registra SudoBat nel menu PORTS, con logo e anteprima animata
 
-**Rilanciare lo stesso comando aggiorna SudoBat** all'ultima versione.
+**Rilanciare lo stesso comando aggiorna SudoBat** all'ultima versione. E dalla 1.2 non serve nemmeno ricordarselo: SudoBat controlla una volta al giorno se c'e' una release nuova e propone l'aggiornamento in **Impostazioni** — mai automatico, sempre dietro tua conferma.
 
 <details>
 <summary>Preferisci fare a mano? I 3 passi equivalenti</summary>

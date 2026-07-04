@@ -269,6 +269,33 @@ def outcomes_sessione_osservata_e_guardia_lancio():
 
 
 @test
+def update_confronto_versioni_e_cache():
+    """Controllo update: confronto numerico per componente ('1.10' > '1.2'),
+    cache giornaliera rispettata, nessuna rete toccata nel test."""
+    from . import update
+    assert update.is_newer("1.2", "1.1")
+    assert update.is_newer("1.10", "1.2")        # non alfabetico!
+    assert not update.is_newer("1.1", "1.1")
+    assert not update.is_newer(None, "1.1")      # niente rete -> mai 'disponibile'
+    assert not update.is_newer("boh", "1.1")     # remoto malformato -> ignora
+
+    with tempfile.TemporaryDirectory() as td:
+        orig_cache, orig_fetch = update._CACHE, update._fetch_remote
+        update._CACHE = Path(td) / "update_check.json"
+        calls = []
+        update._fetch_remote = lambda timeout=3.0: (calls.append(1), "9.9")[1]
+        try:
+            res = update.check()
+            assert res["available"] and res["remote"] == "9.9" and len(calls) == 1
+            res = update.check()                 # entro 24h: cache, niente rete
+            assert res["available"] and len(calls) == 1
+            res = update.check(force=True)       # esplicito: ricontrolla davvero
+            assert len(calls) == 2
+        finally:
+            update._CACHE, update._fetch_remote = orig_cache, orig_fetch
+
+
+@test
 def diagnose_verdetto_sessione():
     """Classificatore a 3 esiti sui SOLI segnali universali (durata, regole log):
     crash -> diagnosi; clean/short -> questionario; unknown -> non si giudica."""

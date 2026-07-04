@@ -24,6 +24,13 @@ def _selftest() -> int:
     a.enter("main")
     a.draw_main()
     a.dispatch(controls.DOWN); a.draw_main()
+    # banner "nuova versione" in home + valore in impostazioni (nessuna rete:
+    # si simula l'esito del controllo, il check vero e' disattivato in headless)
+    a.update_available = "9.9"
+    a.draw_main()
+    a.state = "settings"; a.menu_index = 3; a.draw_settings()
+    a.update_available = None
+    a.state = "main"; a.menu_index = 0
 
     # diagnosi SENZA risolvere gli esiti: il selftest non deve consumare il
     # giudizio (questionario) della sessione reale dell'utente.
