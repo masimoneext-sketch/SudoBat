@@ -83,6 +83,13 @@ def _selftest() -> int:
     a.dispatch(controls.DOWN); a.dispatch(controls.LEFT); a.draw_flags()  # una risposta -> No
     a.dispatch(controls.BACK)  # rimanda: torna al menu, niente scrittura
 
+    # wizard mappatura pad: disegna i passi senza salvare (niente pad in headless
+    # -> si forza il contesto; on_remap_button non si chiama, zero scritture)
+    a.remap_step = 0; a.remap_new = {}; a.remap_back_state = "main"
+    a.state = "remap"; a.draw_remap()
+    a.remap_step = 2; a.draw_remap()
+    a.state = "main"
+
     # schermata consenso condivisione: disegna, naviga, ed esce con B
     # (nessuna decisione salvata, nessuna scrittura)
     a._share_after = (["Test"], "main")

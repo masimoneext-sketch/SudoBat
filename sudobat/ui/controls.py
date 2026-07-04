@@ -7,10 +7,16 @@ salva in /userdata/saves/ports/sudobat/controls.json.
 from __future__ import annotations
 
 import json
+import xml.etree.ElementTree as ET
+from pathlib import Path
 
 import pygame
 
 from . import paths
+
+# La mappatura VERA di ogni pad la conosce gia' Batocera: es_input.cfg viene
+# scritto quando l'utente configura il controller in EmulationStation.
+_ES_INPUT_CFG = Path("/userdata/system/configs/emulationstation/es_input.cfg")
 
 UP, DOWN, LEFT, RIGHT = "up", "down", "left", "right"
 CONFIRM, BACK, SELECT, QUIT = "confirm", "back", "select", "quit"
@@ -30,9 +36,15 @@ _AXIS_THRESHOLD = 0.6
 class InputManager:
     def __init__(self) -> None:
         self.joy: pygame.joystick.Joystick | None = None
-        self.mapping = {"confirm": 0, "back": 1, "select": 2}  # default tipo Xbox
+        self.mapping = {"confirm": 0, "back": 1, "select": 2}  # fallback estremo
         self._axis_state = {0: 0, 1: 0}
         self._init_joystick()
+        # priorita': default < es_input.cfg (il pad come l'ha configurato l'utente
+        # in ES: la realta', non una presunzione) < mappatura salvata da SudoBat.
+        es = self._mapping_from_es()
+        self.from_es = bool(es)   # la UI propone il wizard solo se ES non sa nulla
+        if es:
+            self.mapping.update(es)
         self._load_mapping()
 
     def _init_joystick(self) -> None:
@@ -52,6 +64,40 @@ class InputManager:
 
     def mapping_exists(self) -> bool:
         return paths.controls_path().is_file()
+
+    def _mapping_from_es(self) -> dict | None:
+        """Bottoni del pad letti da es_input.cfg. Si cerca il device per GUID
+        (poi per nome come riserva). Nomi ES -> azioni: in Batocera 'b' e' il
+        tasto sud (conferma nei menu), 'a' l'est (indietro), 'select' e' select.
+        None se il file/il pad non si trovano: restano i default."""
+        if self.joy is None:
+            return None
+        try:
+            root = ET.parse(_ES_INPUT_CFG).getroot()
+        except (ET.ParseError, OSError):
+            return None
+        try:
+            guid = self.joy.get_guid().lower()
+        except Exception:
+            guid = ""
+        cfgs = root.findall("inputConfig")
+        cfg = next((c for c in cfgs
+                    if guid and (c.get("deviceGUID") or "").lower() == guid), None)
+        if cfg is None:
+            cfg = next((c for c in cfgs
+                        if c.get("deviceName") == self.joystick_name()), None)
+        if cfg is None:
+            return None
+        out = {}
+        for es_name, action in (("b", "confirm"), ("a", "back"), ("select", "select")):
+            node = next((i for i in cfg.findall("input")
+                         if i.get("name") == es_name and i.get("type") == "button"), None)
+            if node is not None:
+                try:
+                    out[action] = int(node.get("id", ""))
+                except ValueError:
+                    pass
+        return out or None
 
     def _load_mapping(self) -> None:
         p = paths.controls_path()

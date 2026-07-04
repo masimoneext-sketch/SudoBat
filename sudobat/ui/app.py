@@ -63,6 +63,12 @@ FLAG_DEFS = [
 # qualunque sistema/emulatore.
 CRASH_FLAG = ("crashed", "flag_crashed")
 
+# Wizard mappatura pad: i 3 tasti che servono a SudoBat, chiesti uno alla volta.
+# Si arriva qui solo se es_input.cfg non conosce il pad (o su richiesta esplicita
+# da Impostazioni): la fonte primaria resta la mappatura fatta dall'utente in ES.
+REMAP_STEPS = [("confirm", "remap_confirm"), ("back", "remap_back"),
+               ("select", "remap_select")]
+
 
 class App:
     def __init__(self, headless: bool = False) -> None:
@@ -158,6 +164,11 @@ class App:
 
     def handle_events(self) -> None:
         for event in pygame.event.get():
+            # nel wizard di mappatura serve il bottone GREZZO, prima di ogni
+            # traduzione (che usa proprio la mappatura che stiamo rifacendo)
+            if self.state == "remap" and event.type == pygame.JOYBUTTONDOWN:
+                self.on_remap_button(event.button)
+                continue
             action = self.inp.translate(event)
             if action == controls.QUIT:
                 self.running = False
@@ -311,6 +322,12 @@ class App:
     # --------------------------------------------------------------- splash
     def on_splash(self, action: str) -> None:
         if action in (controls.CONFIRM, controls.BACK, controls.SELECT):
+            # prima partenza con un pad che ES non conosce: chiedi i 3 tasti
+            # (una volta sola; poi restano salvati e rimappabili da Impostazioni)
+            if (self.inp.has_joystick() and not self.inp.mapping_exists()
+                    and not getattr(self.inp, "from_es", False)):
+                self._start_remap("main")
+                return
             self.state = "main"
             self.menu_index = 0
 
@@ -1035,7 +1052,7 @@ class App:
             self.enter("main")
             return
         if action in (controls.UP, controls.DOWN):
-            self.move(4, action)
+            self.move(5, action)
             return
         if self.menu_index == 0 and action in (controls.CONFIRM, controls.LEFT, controls.RIGHT):
             i18n.toggle()
@@ -1047,6 +1064,56 @@ class App:
             _dbg(f"   SHARE: toggle da impostazioni -> {share.consent()}")
         elif self.menu_index == 3 and action == controls.CONFIRM:
             self._on_update_row()
+        elif self.menu_index == 4 and action == controls.CONFIRM:
+            self._start_remap("settings")
+
+    # --------------------------------------------------- mappatura controller
+    def _start_remap(self, back_state: str = "main") -> None:
+        """Wizard 'premi il tasto per...': 3 pressioni, salvate per sempre."""
+        if not self.inp.has_joystick():
+            self._flash([t("remap_nojoy")], back_state)
+            return
+        self.remap_step = 0
+        self.remap_new: dict = {}
+        self.remap_back_state = back_state
+        self.state = "remap"
+        _dbg("-> schermata 'remap' (wizard mappatura pad)")
+
+    def on_remap(self, action: str) -> None:
+        # solo tastiera arriva qui (i bottoni pad sono intercettati grezzi):
+        # ESC annulla senza salvare, la vecchia mappatura resta.
+        if action == controls.BACK:
+            self.state = self.remap_back_state
+            self.menu_index = 0
+
+    def on_remap_button(self, button: int) -> None:
+        if button in self.remap_new.values():
+            return  # stesso tasto per due azioni: ignora, aspetta un tasto diverso
+        self.remap_new[REMAP_STEPS[self.remap_step][0]] = button
+        self.remap_step += 1
+        _dbg(f"   REMAP: {REMAP_STEPS[self.remap_step - 1][0]} -> bottone {button}")
+        if self.remap_step >= len(REMAP_STEPS):
+            self.inp.mapping.update(self.remap_new)
+            try:
+                self.inp.save_mapping()
+            except OSError as e:
+                self._flash([t("remap_savefail"), str(e)], self.remap_back_state)
+                return
+            self._flash([t("remap_done")], self.remap_back_state)
+
+    def draw_remap(self) -> None:
+        w, h = self.screen.get_size()
+        theme.draw_background(self.screen)
+        self._title_bar(t("remap_title"))
+        theme.neon_text(self.screen, self.f_small, self.inp.joystick_name(),
+                        center=(w // 2, int(h * 0.24)), color=theme.NEON_CYAN, glow=False)
+        step_key = REMAP_STEPS[min(self.remap_step, len(REMAP_STEPS) - 1)][1]
+        theme.neon_text(self.screen, self.f_item, t(step_key),
+                        center=(w // 2, int(h * 0.45)), color=theme.NEON_GREEN)
+        theme.neon_text(self.screen, self.f_small,
+                        t("remap_progress", n=self.remap_step + 1, tot=len(REMAP_STEPS)),
+                        center=(w // 2, int(h * 0.58)), color=theme.WHITE, glow=False)
+        self._footer(t("footer_remap"))
 
     # --------------------------------------------------------- aggiornamento
     def _on_update_check(self, res: dict) -> None:
@@ -1139,11 +1206,13 @@ class App:
             (t("set_restore"), latest.name if latest else t("set_nobackup"), 1),
             (t("set_share"), share_val, 2),
             (t("set_update"), upd_val, 3),
+            (t("set_controller"),
+             (self.inp.joystick_name() + t("set_remap_hint")) if self.inp.has_joystick()
+             else t("set_keyboard"), 4),
             (t("set_turbo"), turbo_val, None),
             (t("set_hook"), t("set_installed") if hook_installed else t("set_notinstalled"), None),
             (t("set_conf"), str(config.BATOCERA_CONF_PATH), None),
             (t("set_saves"), str(paths.saves_dir()), None),
-            (t("set_controller"), self.inp.joystick_name() or t("set_keyboard"), None),
         ]
         x = int(w * 0.10)
         y = int(h * 0.28)
