@@ -317,14 +317,22 @@ def cmd_brain():
 def cmd_key(args):
     """Gestione della chiave API Groq PERSONALE dell'utente (il turbo e' opzionale
     e ognuno usa la propria chiave gratuita: i limiti di utilizzo sono i suoi, non
-    condivisi). La chiave vive solo in state/groq_key.txt (gitignorata, permessi
-    600) e non lascia mai il box se non verso Groq."""
-    from . import brain
+    condivisi). La chiave vive solo nello store nascosto state/.groq_key
+    (gitignorato, permessi 600, messo a veto nella condivisione SMB da smbguard)
+    e non lascia mai il box se non verso Groq."""
+    from . import brain, smbguard
     if not args:
         st = brain.key_status()
         if st["configured"]:
             src = "variabile d'ambiente GROQ_API_KEY" if st["source"] == "env" else st["source"]
             print(f"Turbo AI: CONFIGURATO — chiave {st['masked']} (da: {src})")
+            if st["source"] != "env":
+                if smbguard.active():
+                    print("Rete locale: chiave nascosta dalla condivisione SMB (veto attivo).")
+                else:
+                    print("ATTENZIONE: veto SMB non attivo — il file della chiave e' raggiungibile")
+                    print("  dagli ospiti della condivisione di rete di Batocera. Rimedio:")
+                    print("  python3 -m sudobat.smbguard   (e servizio sudobat_smbguard al boot)")
             print("Per verificarla davvero (serve rete): key test")
         else:
             print("Turbo AI: NON configurato (l'app funziona comunque, solo motore offline).")
@@ -343,6 +351,14 @@ def cmd_key(args):
             print(f"Chiave rifiutata: {e}")
             return
         print(f"Chiave salvata in {path} (solo su questo box, permessi 600).")
+        r = smbguard.ensure()
+        if r["active"] and not r["error"]:
+            print("Nascosta anche dalla condivisione di rete (veto SMB attivo).")
+        elif r["active"]:
+            print(f"Veto SMB scritto, ma reload di smbd non riuscito: {r['error']}")
+        else:
+            print(f"ATTENZIONE: veto SMB non applicato ({r['error']}) — il file")
+            print("  potrebbe essere leggibile dagli ospiti della rete locale.")
         print("Verifica con: key test")
     elif action == "test":
         ok, msg = brain.test_key()

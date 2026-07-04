@@ -35,6 +35,8 @@ Batocera shares its folders on your home network:
 3. Create a text file in there named exactly **`groq_key.txt`**.
 4. Open it, paste **only the key** (the line starting with `gsk_`, no spaces, no extra lines) and save.
 
+`groq_key.txt` is just a drop point: the first time SudoBat runs (or on the next reboot) it is imported into a hidden store (`state/.groq_key`), deleted, and the store is made **invisible and unreadable from the network** (a Samba veto, re-applied at every boot by the `sudobat_smbguard` service). As long as `groq_key.txt` exists, anyone on your home network can read it: Batocera's share is open to guests. To close that window right away, launch SudoBat once or use the Path B command.
+
 ### Path B — With one command (via SSH or the Batocera terminal)
 
 If you know how to SSH in (`ssh root@batocera.local`, default password `linux`):
@@ -44,7 +46,11 @@ cd /userdata/system/SudoBat
 python3 -m sudobat.cli key set gsk_YOUR_KEY
 ```
 
-The command checks the key is well-formed and stores it in the right place with the right permissions.
+The command checks the key is well-formed, saves it into the hidden store and enables the SMB veto immediately.
+
+### Path C — Environment variable (for terminal users)
+
+`GROQ_API_KEY` takes precedence over everything and writes nothing to disk: handy for SSH sessions or quick tests. Be aware, though: on Batocera any persistent file you could put it in (`custom.sh`, profiles, scripts) still lives under `/userdata`, i.e. inside the same network share — it is not safer than the vetoed store, just an alternative.
 
 ---
 
@@ -67,10 +73,10 @@ From now on, when a game crashes in a way SudoBat doesn't know, the Diagnose scr
 
 **How much does it cost?** Nothing. Groq's free tier has per-minute/per-day request limits, but SudoBat makes **one** call only when there's an unknown crash — and thanks to distillation each crash is paid once, then it's recognized offline forever.
 
-**Where does my key end up?** Only on your Batocera box, in `state/groq_key.txt` (excluded from the repository, restricted permissions). It's sent to no one except Groq, to authenticate the calls.
+**Where does my key end up?** Only on your Batocera box, in the hidden store `state/.groq_key` (excluded from the repository, permissions 600). Full honesty: Unix permissions alone do NOT protect you from Batocera's network share, which is open to guests and serves files as root — that's why SudoBat vetoes the file in Samba (the `sudobat_smbguard` service, active at every boot), making it invisible and unreadable from the network. The key is sent to no one except Groq, to authenticate the calls.
 
 **What gets sent to Groq?** Only when the turbo runs: the tail of the crash log (~40 lines), the CPU/GPU model and the game title. No key = no traffic at all.
 
-**How do I remove it?** `python3 -m sudobat.cli key remove`, or delete the `state/groq_key.txt` file. SudoBat keeps working on the offline engine alone.
+**How do I remove it?** `python3 -m sudobat.cli key remove`, or delete the `state/.groq_key` file. SudoBat keeps working on the offline engine alone.
 
 **I lost my key / published it by mistake.** Go to console.groq.com → API Keys, revoke the old one and create a new one. Then repeat Part 2.

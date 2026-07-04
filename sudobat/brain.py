@@ -23,7 +23,12 @@ from pathlib import Path
 
 from . import tuning
 
-_KEY_FILE = Path(__file__).parent.parent / "state" / "groq_key.txt"
+# Store della chiave: file nascosto, messo a veto nella condivisione SMB da
+# smbguard (i permessi 600 da soli NON bastano: Samba serve /userdata come
+# root agli ospiti della LAN). Il groq_key.txt documentato in GROQ_SETUP e'
+# solo un punto di consegna: appena visto viene importato qui e cancellato.
+_KEY_FILE = Path(__file__).parent.parent / "state" / ".groq_key"
+_DROP_FILE = Path(__file__).parent.parent / "state" / "groq_key.txt"
 _ENDPOINT = "https://api.groq.com/openai/v1/chat/completions"
 # Il nome del modello Groq puo' cambiare nel tempo: sovrascrivibile con GROQ_MODEL.
 _DEFAULT_MODEL = "llama-3.3-70b-versatile"
@@ -46,12 +51,49 @@ _SYSTEM_PROMPT = (
 )
 
 
+def _normalize(key: str) -> str:
+    """Pulizia + validazione di forma. Solleva ValueError se non sembra una
+    chiave Groq: meglio rifiutare subito una chiave incollata male che fallire
+    al primo crash."""
+    key = (key or "").strip().strip('"').strip("'")
+    if not key or any(c.isspace() for c in key) or len(key) < 20:
+        raise ValueError("chiave non valida: attesa una chiave Groq intera, senza spazi")
+    if not key.startswith("gsk_"):
+        raise ValueError("chiave non valida: le chiavi API di Groq iniziano con 'gsk_'")
+    return key
+
+
+def ingest_plaintext(*, guard: bool = True) -> Path | None:
+    """Se l'utente ha depositato state/groq_key.txt (la via facile via SMB,
+    docs/GROQ_SETUP*), lo importa nello store nascosto e CANCELLA l'originale
+    in chiaro: la finestra di esposizione sulla rete finisce qui. Ritorna lo
+    store se ha importato, None altrimenti (file assente o malformato: un
+    file malformato resta li', visibile, cosi' l'utente capisce e corregge).
+    Con guard=True prova anche ad alzare subito il veto SMB (best-effort)."""
+    if not _DROP_FILE.is_file():
+        return None
+    try:
+        key = _normalize(_DROP_FILE.read_text())
+    except (OSError, ValueError):
+        return None
+    _KEY_FILE.parent.mkdir(parents=True, exist_ok=True)
+    _KEY_FILE.write_text(key + "\n")
+    os.chmod(_KEY_FILE, 0o600)
+    _DROP_FILE.unlink()
+    if guard:
+        from . import smbguard
+        smbguard.ensure()
+    return _KEY_FILE
+
+
 def api_key() -> str | None:
-    """Chiave Groq: variabile GROQ_API_KEY, altrimenti state/groq_key.txt. None se
-    assente (l'utente deve procurarsela gratis su console.groq.com)."""
+    """Chiave Groq: variabile GROQ_API_KEY, altrimenti lo store state/.groq_key
+    (importando al volo un eventuale groq_key.txt depositato dall'utente).
+    None se assente (l'utente deve procurarsela gratis su console.groq.com)."""
     env = os.environ.get("GROQ_API_KEY", "").strip()
     if env:
         return env
+    ingest_plaintext()
     if _KEY_FILE.is_file():
         val = _KEY_FILE.read_text().strip()
         if val:
@@ -74,6 +116,7 @@ def key_status() -> dict:
     env = os.environ.get("GROQ_API_KEY", "").strip()
     if env:
         return {"configured": True, "source": "env", "masked": _mask(env)}
+    ingest_plaintext()
     if _KEY_FILE.is_file():
         val = _KEY_FILE.read_text().strip()
         if val:
@@ -82,26 +125,27 @@ def key_status() -> dict:
 
 
 def save_key(key: str) -> Path:
-    """Salva la chiave PERSONALE dell'utente in state/groq_key.txt (fuori dal
-    repo via .gitignore, permessi 600). Validazione di forma prima di scrivere:
-    meglio rifiutare subito una chiave incollata male che fallire al primo crash."""
-    key = (key or "").strip().strip('"').strip("'")
-    if not key or any(c.isspace() for c in key) or len(key) < 20:
-        raise ValueError("chiave non valida: attesa una chiave Groq intera, senza spazi")
-    if not key.startswith("gsk_"):
-        raise ValueError("chiave non valida: le chiavi API di Groq iniziano con 'gsk_'")
+    """Salva la chiave PERSONALE dell'utente nello store nascosto
+    state/.groq_key (gitignorato, permessi 600, messo a veto SMB da smbguard).
+    Ripulisce anche un eventuale groq_key.txt in chiaro rimasto in giro."""
+    key = _normalize(key)
     _KEY_FILE.parent.mkdir(parents=True, exist_ok=True)
     _KEY_FILE.write_text(key + "\n")
     os.chmod(_KEY_FILE, 0o600)
+    if _DROP_FILE.is_file():
+        _DROP_FILE.unlink()
     return _KEY_FILE
 
 
 def remove_key() -> bool:
-    """Elimina la chiave salvata. True se c'era. Non tocca l'eventuale env."""
-    if _KEY_FILE.is_file():
-        _KEY_FILE.unlink()
-        return True
-    return False
+    """Elimina la chiave salvata (store nascosto e/o groq_key.txt in chiaro).
+    True se c'era qualcosa. Non tocca l'eventuale env."""
+    found = False
+    for f in (_KEY_FILE, _DROP_FILE):
+        if f.is_file():
+            f.unlink()
+            found = True
+    return found
 
 
 def test_key() -> tuple[bool, str]:

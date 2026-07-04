@@ -35,6 +35,8 @@ Batocera condivide le sue cartelle sulla rete di casa:
 3. Crea lì dentro un file di testo chiamato esattamente **`groq_key.txt`**.
 4. Aprilo, incolla **solo la chiave** (la riga che inizia con `gsk_`, niente spazi né altre righe) e salva.
 
+Il file `groq_key.txt` è solo un punto di consegna: al primo avvio di SudoBat (o al primo riavvio del box) viene importato in uno store nascosto (`state/.groq_key`), cancellato, e lo store viene reso **invisibile e inaccessibile dalla rete** (veto Samba, riapplicato a ogni boot dal servizio `sudobat_smbguard`). Finché il file `groq_key.txt` esiste, chiunque sia sulla tua rete di casa può leggerlo: la condivisione di Batocera è aperta agli ospiti. Se vuoi chiudere subito la finestra, avvia SudoBat una volta o dai il comando della Strada B.
+
 ### Strada B — Con un comando (via SSH o dal terminale del Batocera)
 
 Se sai collegarti in SSH (`ssh root@batocera.local`, password predefinita `linux`):
@@ -44,7 +46,11 @@ cd /userdata/system/SudoBat
 python3 -m sudobat.cli key set gsk_LA_TUA_CHIAVE
 ```
 
-Il comando controlla che la chiave sia scritta bene e la salva nel posto giusto con i permessi corretti.
+Il comando controlla che la chiave sia scritta bene, la salva nello store nascosto e attiva subito il veto SMB.
+
+### Strada C — Variabile d'ambiente (per chi lavora da terminale)
+
+`GROQ_API_KEY` ha la precedenza su tutto e non scrive nulla su disco: utile per sessioni SSH o prove. Attenzione però: su Batocera qualunque file persistente in cui potresti metterla (`custom.sh`, profili, script) vive comunque sotto `/userdata`, cioè dentro la stessa condivisione di rete — non è più sicura dello store con veto, è solo un'alternativa.
 
 ---
 
@@ -67,10 +73,10 @@ Da questo momento, quando un gioco crasha in un modo che SudoBat non conosce, ne
 
 **Quanto costa?** Nulla. Il piano gratuito di Groq ha limiti di richieste al minuto/giorno, ma SudoBat fa **una** chiamata solo quando c'è un crash sconosciuto — e grazie alla distillazione ogni crash si paga una volta sola, poi viene riconosciuto offline.
 
-**Dove finisce la mia chiave?** Solo sul tuo Batocera, nel file `state/groq_key.txt` (escluso dal repository, permessi ristretti). Non viene inviata a nessuno tranne che a Groq per autenticare le chiamate.
+**Dove finisce la mia chiave?** Solo sul tuo Batocera, nello store nascosto `state/.groq_key` (escluso dal repository, permessi 600). Onestà dovuta: i permessi Unix da soli NON proteggono dalla condivisione di rete di Batocera, che è aperta agli ospiti e serve i file come root — per questo SudoBat mette il file a veto in Samba (servizio `sudobat_smbguard`, attivo a ogni boot), rendendolo invisibile e illeggibile dalla rete. La chiave non viene inviata a nessuno tranne che a Groq per autenticare le chiamate.
 
 **Cosa viene inviato a Groq?** Solo quando usi il turbo: la coda del log di crash (~40 righe), il modello di CPU/GPU e il titolo del gioco. Niente chiave = niente traffico.
 
-**Come la rimuovo?** `python3 -m sudobat.cli key remove`, oppure cancella il file `state/groq_key.txt`. SudoBat continua a funzionare col solo motore offline.
+**Come la rimuovo?** `python3 -m sudobat.cli key remove`, oppure cancella il file `state/.groq_key`. SudoBat continua a funzionare col solo motore offline.
 
 **Ho perso la chiave / l'ho pubblicata per errore.** Vai su console.groq.com → API Keys, elimina quella vecchia (Revoke) e creane una nuova. Poi ripeti la Parte 2.

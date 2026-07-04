@@ -6,11 +6,15 @@
 #   curl -L https://raw.githubusercontent.com/masimoneext-sketch/SudoBat/master/install.sh | bash
 #
 # Fa, in ordine: controlli ambiente -> scarica/aggiorna il repo in
-# /userdata/system/SudoBat -> attiva l'hook dei lanci -> selftest ->
-# registra SudoBat nel menu PORTS. Idempotente: rilanciarlo aggiorna.
+# /userdata/system/SudoBat -> attiva l'hook dei lanci -> installa il servizio
+# sudobat_smbguard (nasconde la chiave Groq dalla condivisione SMB) ->
+# selftest -> registra SudoBat nel menu PORTS. Idempotente: rilanciarlo aggiorna.
 #
-# Non tocca nient'altro del sistema. Per disinstallare:
+# Fuori dalla propria cartella tocca solo: l'hook, il servizio smbguard e
+# (a runtime, in RAM) la riga "veto files" di /etc/samba/smb.conf.
+# Per disinstallare:
 #   rm /userdata/system/scripts/sudobat-hook.sh
+#   rm /userdata/system/services/sudobat_smbguard
 #   rm -r /userdata/system/SudoBat /userdata/roms/ports/SudoBat.sh
 #
 # Variabili opzionali (per test/situazioni particolari):
@@ -63,6 +67,21 @@ chmod +x "$DEST/scripts/sudobat-hook.sh" "$DEST/scripts/SudoBat.sh" 2>/dev/null
 mkdir -p "$SCRIPTS_DIR"
 ln -sf "$DEST/scripts/sudobat-hook.sh" "$SCRIPTS_DIR/sudobat-hook.sh"
 say "hook dei lanci attivato: $SCRIPTS_DIR/sudobat-hook.sh"
+
+# ------------------------------------------------------------- smbguard
+# Batocera esporta /userdata via SMB agli ospiti della LAN: senza questo
+# servizio la chiave Groq salvata su disco sarebbe leggibile da chiunque in
+# rete locale. Il servizio riapplica a ogni boot il veto Samba sullo store
+# della chiave (il rootfs e' in RAM, la patch a smb.conf non sopravvive).
+SERVICES_DIR=/userdata/system/services
+mkdir -p "$SERVICES_DIR"
+install -m 755 "$DEST/scripts/sudobat_smbguard" "$SERVICES_DIR/sudobat_smbguard"
+batocera-services enable sudobat_smbguard >/dev/null 2>&1 || true
+if (cd "$DEST" && python3 -m sudobat.smbguard); then
+    say "protezione chiave attiva: lo store della chiave e' nascosto dalla rete (veto SMB)"
+else
+    say "ATTENZIONE: veto SMB non applicato ora; il servizio ritenta a ogni boot"
+fi
 
 # ---------------------------------------------------------------- selftest
 say "verifico l'installazione (selftest del motore, nessuna scrittura sul sistema)..."

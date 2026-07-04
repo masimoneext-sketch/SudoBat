@@ -419,11 +419,16 @@ def brain_verify_confine_di_sicurezza():
 
 @test
 def brain_gestione_chiave_personale():
-    orig_file = brain._KEY_FILE
+    from . import smbguard
+    orig_file, orig_drop = brain._KEY_FILE, brain._DROP_FILE
+    orig_ensure = smbguard.ensure
     orig_env = os.environ.pop("GROQ_API_KEY", None)
     try:
         with tempfile.TemporaryDirectory() as td:
-            brain._KEY_FILE = Path(td) / "state" / "groq_key.txt"
+            brain._KEY_FILE = Path(td) / "state" / ".groq_key"
+            brain._DROP_FILE = Path(td) / "state" / "groq_key.txt"
+            # il selftest non deve toccare lo smb.conf vero
+            smbguard.ensure = lambda reload=True: {"active": True, "changed": False, "error": None}
             assert brain.key_status()["configured"] is False
             # chiavi malformate rifiutate PRIMA di scrivere
             for bad in ("", "  ", "gsk_corta", "gsk_con spazi dentro_abcdefghijk",
@@ -436,6 +441,7 @@ def brain_gestione_chiave_personale():
             # chiave ben formata: salvata con permessi 600, mascherata nello stato
             key = "gsk_" + "a" * 40 + "WXYZ"
             path = brain.save_key(f'  "{key}"  ')  # sopravvive a spazi/virgolette incollati
+            assert path == brain._KEY_FILE          # store NASCOSTO, non il txt
             assert path.read_text().strip() == key
             assert (path.stat().st_mode & 0o777) == 0o600
             st = brain.key_status()
@@ -446,10 +452,65 @@ def brain_gestione_chiave_personale():
             assert brain.remove_key() is True
             assert brain.key_status()["configured"] is False
             assert brain.remove_key() is False
+            # ingestione: un groq_key.txt depositato (via SMB) viene importato
+            # nello store nascosto e l'originale in chiaro CANCELLATO
+            brain._DROP_FILE.parent.mkdir(parents=True, exist_ok=True)
+            brain._DROP_FILE.write_text(key + "\n")
+            assert brain.api_key() == key
+            assert not brain._DROP_FILE.exists()
+            assert brain._KEY_FILE.is_file()
+            assert (brain._KEY_FILE.stat().st_mode & 0o777) == 0o600
+            # un drop malformato NON viene ingerito ne' cancellato (l'utente
+            # deve vederlo e correggerlo)
+            brain.remove_key()
+            brain._DROP_FILE.write_text("non-e-una-chiave\n")
+            assert brain.api_key() is None
+            assert brain._DROP_FILE.exists()
     finally:
-        brain._KEY_FILE = orig_file
+        brain._KEY_FILE, brain._DROP_FILE = orig_file, orig_drop
+        smbguard.ensure = orig_ensure
         if orig_env is not None:
             os.environ["GROQ_API_KEY"] = orig_env
+
+
+@test
+def smbguard_veto_su_smb_conf():
+    from . import smbguard
+    fixture = (
+        "[global]\n   workgroup = WORKGROUP\n\n"
+        "[share]\n   path = /userdata\n   guest ok = yes\n"
+        "   veto files = /._*/.DS_Store/\n   delete veto files = yes\n"
+    )
+    # aggiunta alla riga veto esistente, senza toccare il resto
+    patched = smbguard.patch_text(fixture)
+    assert patched is not None
+    assert "veto files = /._*/.DS_Store/.groq_key/" in patched
+    assert patched.count("veto files") == fixture.count("veto files")
+    # idempotente: sul testo gia' protetto non c'e' niente da fare
+    assert smbguard.patch_text(patched) is None
+    # [share] senza riga veto: la riga viene creata
+    patched2 = smbguard.patch_text("[share]\n   path = /userdata\n")
+    assert patched2 is not None and "veto files = /.groq_key/" in patched2
+    assert smbguard.patch_text(patched2) is None
+    # niente [share] (non e' lo smb.conf di Batocera): ci si rifiuta di toccare
+    try:
+        smbguard.patch_text("[global]\n   workgroup = X\n")
+        assert False, "atteso LookupError senza sezione [share]"
+    except LookupError:
+        pass
+    # ensure() end-to-end su una copia temporanea (mai sul file vero)
+    orig_conf = smbguard.SMB_CONF
+    try:
+        with tempfile.TemporaryDirectory() as td:
+            smbguard.SMB_CONF = Path(td) / "smb.conf"
+            smbguard.SMB_CONF.write_text(fixture)
+            r = smbguard.ensure(reload=False)
+            assert r["active"] and r["changed"] and r["error"] is None
+            assert smbguard.active() is True
+            r2 = smbguard.ensure(reload=False)
+            assert r2["active"] and not r2["changed"]
+    finally:
+        smbguard.SMB_CONF = orig_conf
 
 
 @test

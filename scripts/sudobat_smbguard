@@ -1,0 +1,16 @@
+#!/bin/bash
+# SudoBat — servizio Batocera "sudobat_smbguard".
+# A ogni boot ri-nasconde la chiave Groq dalla condivisione SMB: il rootfs di
+# Batocera vive in RAM, quindi /etc/samba/smb.conf riparte vergine e il veto
+# va riapplicato (vedi sudobat/smbguard.py). Importa anche un eventuale
+# groq_key.txt depositato in chiaro via rete.
+# Installato in /userdata/system/services/ da install.sh; si gestisce con
+# "batocera-services" o dal menu servizi di EmulationStation.
+SUDOBAT_DIR="${SUDOBAT_DEST:-/userdata/system/SudoBat}"
+case "$1" in
+    start)
+        [ -d "$SUDOBAT_DIR/sudobat" ] || exit 0
+        cd "$SUDOBAT_DIR" && python3 -m sudobat.smbguard
+        ;;
+esac
+exit 0
