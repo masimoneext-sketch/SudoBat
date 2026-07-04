@@ -48,9 +48,12 @@ def is_newer(remote: str | None, local: str) -> bool:
 
 
 def _fetch_remote(timeout: float = 3.0) -> str | None:
-    """La VERSION pubblicata, o None (niente rete / repo irraggiungibile)."""
+    """La VERSION pubblicata, o None (niente rete / repo irraggiungibile).
+    Il parametro fittizio scavalca la cache della CDN di raw.githubusercontent
+    (tiene i 404/valori vecchi per minuti): il controllo e' raro, meglio fresco."""
     req = urllib.request.Request(
-        _REMOTE_URL, headers={"User-Agent": f"SudoBat/{local_version()} (Batocera)"})
+        f"{_REMOTE_URL}?t={int(time.time())}",
+        headers={"User-Agent": f"SudoBat/{local_version()} (Batocera)"})
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             return resp.read().decode(errors="replace").strip()
