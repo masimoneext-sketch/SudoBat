@@ -88,7 +88,7 @@ rm -r /userdata/system/SudoBat
 5. **Rigioca**. Alla riapertura SudoBat ti chiede com'è andata con 4 domande secche (fluido? FPS ok? scatti? glitch?).
 6. In base alla risposta: esperienza buona → **salvata in catalogo** (la prossima volta parte già così); ancora problemi → propone il gradino successivo (set più leggero, o cambio core/emulatore con istruzioni).
 
-Tutto si naviga col **gamepad** (o tastiera). Interfaccia in **italiano e inglese** (si cambia in Impostazioni).
+Tutto si naviga col **gamepad** (o tastiera). Interfaccia in **italiano e inglese**: si cambia da **qualsiasi schermata** con **START** sul pad (o **L** su tastiera) — il promemoria è sempre in alto a destra.
 
 ### Da terminale (opzionale)
 

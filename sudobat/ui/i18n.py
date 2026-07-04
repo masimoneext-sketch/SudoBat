@@ -15,6 +15,9 @@ _lang: str | None = None
 STRINGS = {
     "it": {
         "lang_name": "Italiano",
+        # badge fisso in alto a destra: mostra la lingua di DESTINAZIONE, cosi'
+        # chi non capisce quella corrente legge la propria ("English")
+        "lang_hint": "START/L: English",
         "app_subtitle": "tuning grafico per-gioco, consapevole dell'hardware",
         "press_key": "Premi un tasto",
         # menu principale
@@ -73,6 +76,7 @@ STRINGS = {
         "remap_confirm": "Premi il tasto per CONFERMA",
         "remap_back": "Premi il tasto per INDIETRO",
         "remap_select": "Premi il tasto per SELECT (turbo AI)",
+        "remap_lang": "Premi il tasto per LINGUA (IT/EN)",
         "remap_progress": "tasto {n} di {tot}",
         "remap_done": "Mappatura salvata!",
         "remap_nojoy": "Nessun controller rilevato.",
@@ -211,6 +215,7 @@ STRINGS = {
     },
     "en": {
         "lang_name": "English",
+        "lang_hint": "START/L: Italiano",
         "app_subtitle": "per-game graphics tuning, hardware-aware",
         "press_key": "Press any key",
         "menu_diagnose": "Diagnose last launch",
@@ -263,6 +268,7 @@ STRINGS = {
         "remap_confirm": "Press the button for CONFIRM",
         "remap_back": "Press the button for BACK",
         "remap_select": "Press the button for SELECT (AI turbo)",
+        "remap_lang": "Press the button for LANGUAGE (IT/EN)",
         "remap_progress": "button {n} of {tot}",
         "remap_done": "Mapping saved!",
         "remap_nojoy": "No controller detected.",

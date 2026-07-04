@@ -57,6 +57,13 @@ def _selftest() -> int:
     a.on_settings(controls.CONFIRM)                      # torna a IT
     i18n.set_lang("it")
 
+    # cambio lingua GLOBALE (START/L): toggle da una schermata qualsiasi via
+    # dispatch + disegno completo col badge in alto a destra (draw(), non draw_X)
+    a.state = "main"; a.menu_index = 0
+    a.dispatch(controls.LANG); a.draw()                  # -> EN, badge "Italiano"
+    a.dispatch(controls.LANG); a.draw()                  # -> IT, badge "English"
+    i18n.set_lang("it")
+
     a.enter("hardware"); a.draw_hardware()
 
     a.state = "catalog_sys"; a.menu_index = 0; a.draw_catalog_sys()

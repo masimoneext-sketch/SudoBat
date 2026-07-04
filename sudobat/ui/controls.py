@@ -20,6 +20,7 @@ _ES_INPUT_CFG = Path("/userdata/system/configs/emulationstation/es_input.cfg")
 
 UP, DOWN, LEFT, RIGHT = "up", "down", "left", "right"
 CONFIRM, BACK, SELECT, QUIT = "confirm", "back", "select", "quit"
+LANG = "lang"  # cambio lingua IT/EN, disponibile in OGNI schermata (START / L)
 
 # Tastiera: mappa fissa, sempre disponibile come rete di sicurezza.
 _KEYS = {
@@ -28,6 +29,7 @@ _KEYS = {
     pygame.K_RETURN: CONFIRM, pygame.K_KP_ENTER: CONFIRM,
     pygame.K_ESCAPE: BACK, pygame.K_BACKSPACE: BACK,
     pygame.K_SPACE: SELECT,
+    pygame.K_l: LANG,
 }
 
 _AXIS_THRESHOLD = 0.6
@@ -36,7 +38,8 @@ _AXIS_THRESHOLD = 0.6
 class InputManager:
     def __init__(self) -> None:
         self.joy: pygame.joystick.Joystick | None = None
-        self.mapping = {"confirm": 0, "back": 1, "select": 2}  # fallback estremo
+        # fallback estremo (layout tipo Xbox: start=7 per la lingua)
+        self.mapping = {"confirm": 0, "back": 1, "select": 2, "lang": 7}
         self._axis_state = {0: 0, 1: 0}
         self._init_joystick()
         # priorita': default < es_input.cfg (il pad come l'ha configurato l'utente
@@ -70,7 +73,8 @@ class InputManager:
     def _mapping_from_es(self) -> dict | None:
         """Bottoni del pad letti da es_input.cfg. Si cerca il device per GUID
         (poi per nome come riserva). Nomi ES -> azioni: in Batocera 'b' e' il
-        tasto sud (conferma nei menu), 'a' l'est (indietro), 'select' e' select.
+        tasto sud (conferma nei menu), 'a' l'est (indietro), 'select' e' select,
+        'start' cambia la lingua.
         None se il file/il pad non si trovano: restano i default."""
         if self.joy is None:
             return None
@@ -91,7 +95,8 @@ class InputManager:
         if cfg is None:
             return None
         out = {}
-        for es_name, action in (("b", "confirm"), ("a", "back"), ("select", "select")):
+        for es_name, action in (("b", "confirm"), ("a", "back"), ("select", "select"),
+                                ("start", "lang")):
             node = next((i for i in cfg.findall("input")
                          if i.get("name") == es_name and i.get("type") == "button"), None)
             if node is not None:

@@ -88,7 +88,7 @@ rm -r /userdata/system/SudoBat
 5. **Replay**. On the next open, SudoBat asks how it went with 4 quick questions (smooth? FPS ok? stutter? glitches?).
 6. Based on your answers: good experience → **saved to the catalog** (next time it starts like that already); still trouble → it proposes the next step (a lighter set, or a core/emulator change with instructions).
 
-Everything is navigable with the **gamepad** (or keyboard). Interface in **English and Italian** (switchable in Settings).
+Everything is navigable with the **gamepad** (or keyboard). Interface in **English and Italian**: switch from **any screen** with **START** on the pad (or **L** on the keyboard) — the reminder is always in the top-right corner.
 
 ### From the terminal (optional)
 

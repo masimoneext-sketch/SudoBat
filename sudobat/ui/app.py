@@ -67,7 +67,7 @@ CRASH_FLAG = ("crashed", "flag_crashed")
 # Si arriva qui solo se es_input.cfg non conosce il pad (o su richiesta esplicita
 # da Impostazioni): la fonte primaria resta la mappatura fatta dall'utente in ES.
 REMAP_STEPS = [("confirm", "remap_confirm"), ("back", "remap_back"),
-               ("select", "remap_select")]
+               ("select", "remap_select"), ("lang", "remap_lang")]
 
 
 class App:
@@ -177,6 +177,14 @@ class App:
                 self.dispatch(action)
 
     def dispatch(self, action: str) -> None:
+        # cambio lingua GLOBALE (START sul pad / L su tastiera): funziona in ogni
+        # schermata, cosi' chi non e' italiano non deve arrivare a Impostazioni.
+        # Le etichette si risolvono a runtime con t(): basta ridisegnare.
+        if action == controls.LANG:
+            i18n.toggle()
+            self._fonts()  # nel caso cambi metrica testo
+            _dbg(f"   LINGUA: switch globale -> {i18n.lang()}")
+            return
         handler = getattr(self, f"on_{self.state}", None)
         if handler:
             handler(action)
@@ -1325,10 +1333,23 @@ class App:
             theme.neon_text(self.screen, self.f_item, label, center=(w // 2, y + (line_h - 8) // 2 - 6),
                             color=theme.NEON_GREEN if sel else theme.DIM, glow=sel)
 
+    def _lang_badge(self) -> None:
+        """Promemoria fisso in alto a destra su OGNI schermata: quale tasto cambia
+        lingua e verso quale lingua si va. Nascosto solo nel wizard di mappatura,
+        dove i bottoni del pad vengono catturati grezzi (START li' non cambia lingua)."""
+        w, _ = self.screen.get_size()
+        txt = t("lang_hint")
+        tw = self.f_tiny.size(txt)[0]
+        theme.neon_text(self.screen, self.f_tiny, txt,
+                        topleft=(w - tw - int(w * 0.03), int(w * 0.02)),
+                        color=theme.DIM, glow=False)
+
     def draw(self) -> None:
         drawer = getattr(self, f"draw_{self.state}", None)
         if drawer:
             drawer()
+        if self.state != "remap":
+            self._lang_badge()
         if self.has_display:
             pygame.display.flip()
 
