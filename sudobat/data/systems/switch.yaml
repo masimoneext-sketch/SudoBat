@@ -1,14 +1,20 @@
-# Catalogo giochi Switch. Schema in PRESET_SCHEMA.md.
-#
-# VUOTO DI PROPOSITO. Nessun preset scritto a mano da Claude.
-# SudoBat identifica il gioco da solo (Title ID, sudobat.identify.switch) e DERIVA
-# i set grafici dal motore (sudobat.tuning) su hardware + emulatore; gli esiti
-# reali (sudobat.outcomes) li affinano giocando.
-# Il tool fa il lavoro. Qui dentro non c'e' conoscenza pre-cucinata.
-#
-# NOTA: la voce Mario Odyssey che stava qui conteneva una scoperta VERA di una
-# nostra sessione reale (crash cutscene Citron/Eden su UHD630 -> Ryujinx regge).
-# Quella NON e' inventata: resta nella storia git. Va pero' riportata dove il tool
-# la usa da solo -- le regole di sudobat/data/diagnostics che il logscan legge --
-# non pre-caricata qui come verdetto. Da decidere con Marco.
-games: {}
+# Catalogo giochi SWITCH. Schema in PRESET_SCHEMA.md.
+# POPOLATO DA SUDOBAT, non a mano: ogni voce 'validated' e' un set che ha
+# dato una BUONA esperienza all'utente su quella fascia hardware (provenienza
+# + data + flag). Conoscenza guadagnata sul campo, non congettura.
+games:
+  0100ea80032ea000:
+    title: New Super Mario Bros. U Deluxe
+    validated:
+      igpu-weak:
+        settings:
+          anisotropy: '2'
+          aliasing_method: '0'
+          scale_filter: '1'
+        by: user
+        when: '2026-07-04 13:09:22'
+        flags:
+          fluido: true
+          fps_ok: true
+          scatti_concitate: false
+          glitch: false
